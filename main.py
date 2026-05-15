@@ -23,10 +23,10 @@ if __name__ == "__main__":
     print(f"============= {city} ===========")
 
     val_metric_name = (
-        "val_loss" if args.model[0] not in ["PRESLEY", "COLLEI"] else "val_auc"
+        "val_loss" if args.model[0] not in ["BRIE", "COLLEI"] else "val_auc"
     )
 
-    val_metric_mode = "min" if args.model[0] not in ["PRESLEY", "COLLEI"] else "max"
+    val_metric_mode = "min" if args.model[0] not in ["BRIE", "COLLEI"] else "max"
 
     # Initialize datamodule
     dm = ImageAuthorshipDataModule(
@@ -138,7 +138,7 @@ if __name__ == "__main__":
                 + str(config["lr"])
                 + "_dropout_"
                 + str(config["dropout"]),
-                save_dir="C:/Users/Komi/Papers/BRIE/csv_logs",
+                save_dir="C:/Users/alejc/Documents/(UIMP) MASTER MUIIA (2024 2026)/(2) 12 TFM MUIIA/workspace-brie/csv_logs",
             )
 
             trainer = pl.Trainer(
@@ -186,10 +186,17 @@ if __name__ == "__main__":
 
         # Obtain predictions of each trained model
         for model_name in args.model:
-            if not args.load_preds or model_name in ["PRESLEY"]:
-                model = utils.get_model(
-                    model_name, vars(args), dm.nusers
-                ).load_from_checkpoint(f"models/{city}/{model_name}/{filename}.ckpt")
+            if not args.load_preds or model_name in ["BRIE"]:
+                # 1. Obtener la clase del modelo (no una instancia)
+                ModelClass = utils.get_model(model_name, vars(args), dm.nusers).__class__
+
+                # 2. Cargar desde checkpoint usando la clase
+                model = ModelClass.load_from_checkpoint(
+                    f"models/{city}/{model_name}/{filename}.ckpt",
+                    **vars(args),
+                    nusers=dm.nusers
+                )
+
 
                 test_preds = torch.cat(
                     trainer.predict(model=model, dataloaders=dm.test_dataloader())

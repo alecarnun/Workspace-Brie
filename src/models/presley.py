@@ -6,7 +6,7 @@ from torch.nn.init import xavier_uniform_
 from torch.nn import Dropout
 
 
-class PRESLEY(MF_ELVis):
+class BRIE(MF_ELVis):
     def __init__(self, d: int, nusers: int, lr: float, dropout=0.0):
         """
         BPR (Bayesian Pairwise Ranking) loss based Matrix Factorisation model for image autorship
@@ -54,7 +54,7 @@ class PRESLEY(MF_ELVis):
         preds = self((users, images), output_logits=True)
 
         self.val_recall.update(preds, targets.long(), id_tests)
-        self.val_auc.update(preds, targets.long(), users)
+        self.val_auc.update(preds, targets.long(), users.long())
 
         self.log(
             "val_recall", self.val_recall, on_epoch=True, logger=True, prog_bar=True

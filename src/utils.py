@@ -1,6 +1,6 @@
 from src.models.mf_elvis import MF_ELVis
 from src.models.elvis import ELVis
-from src.models.presley import PRESLEY
+from src.models.presley import BRIE
 from src.models.collei import COLLEI
 
 from src.datamodule import *
@@ -15,8 +15,8 @@ def get_model(model_name, config, nusers):
         model = ELVis(d=config['d'],
                       nusers=nusers,
                       lr=config['lr'])
-    elif model_name == 'PRESLEY':
-        model = PRESLEY(d=config['d'],
+    elif model_name == 'BRIE':
+        model = BRIE(d=config['d'],
                         nusers=nusers,
                         lr=config['lr'],
                         dropout=config['dropout'])
@@ -28,8 +28,8 @@ def get_model(model_name, config, nusers):
     return model
 
 
-def get_presley_config(config, nusers):
-    return PRESLEY(config=config, nusers=nusers)
+def get_brie_config(config, nusers):
+    return BRIE(config=config, nusers=nusers)
 
 
 def get_dataset_constructor(model_name):
@@ -37,6 +37,6 @@ def get_dataset_constructor(model_name):
         dataset = TripadvisorImageAuthorshipBCEDataset
     elif model_name in ['COLLEI']:
         dataset = TripadvisorImageAuthorshipCLDataset
-    elif model_name in ['PRESLEY']:
+    elif model_name in ['BRIE']:
         dataset = TripadvisorImageAuthorshipBPRDataset
     return dataset

@@ -32,7 +32,7 @@ class ImageAuthorshipDataModule(LightningDataModule):
         self.image_embeddings = Tensor(
             pickle.load(
                 open(
-                    "C:/Users/Komi/Papers/BRIE/data/"
+                    "C:/Users/alejc/Documents/(UIMP) MASTER MUIIA (2024 2026)/(2) 12 TFM MUIIA/workspace-brie/data/"
                     + self.city
                     + "/data_10+10/IMG_VEC",
                     "rb",
@@ -66,7 +66,7 @@ class ImageAuthorshipDataModule(LightningDataModule):
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
-            persistent_workers=True,
+            persistent_workers=self.num_workers > 0,
         )
 
     def val_dataloader(self):
@@ -74,7 +74,7 @@ class ImageAuthorshipDataModule(LightningDataModule):
             self.val_dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            persistent_workers=True,
+            persistent_workers=self.num_workers > 0,
         )
 
     def test_dataloader(self):
@@ -82,7 +82,7 @@ class ImageAuthorshipDataModule(LightningDataModule):
             self.test_dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            persistent_workers=True,
+            persistent_workers=self.num_workers > 0,
         )
 
 
@@ -106,7 +106,7 @@ class TripadvisorImageAuthorshipBCEDataset(Dataset):
 
         self.dataframe = pickle.load(
             open(
-                f"C:/Users/Komi/Papers/BRIE/data/{city}/data_10+10/{partition_name}_IMG",
+                f"C:/Users/alejc/Documents/(UIMP) MASTER MUIIA (2024 2026)/(2) 12 TFM MUIIA/workspace-brie/data/{city}/data_10+10/{partition_name}_IMG",
                 "rb",
             )
         )
@@ -125,7 +125,8 @@ class TripadvisorImageAuthorshipBCEDataset(Dataset):
         image_id = self.dataframe.at[idx, "id_img"]
         image = self.datamodule.image_embeddings[image_id]
 
-        target = float(self.dataframe.at[idx, self.takeordev])
+        # No hay columna de target en tus PKL, así que asignamos 1 siempre
+        target = 1.0
 
         if self.set_type == "train" or self.set_type == "test":
             return user_id, image, target
@@ -136,7 +137,7 @@ class TripadvisorImageAuthorshipBCEDataset(Dataset):
 
 
 # Dataset to train with BPR criterion
-# Compatible with models: PRESLEY
+# Compatible with models: BRIE
 class TripadvisorImageAuthorshipBPRDataset(TripadvisorImageAuthorshipBCEDataset):
     def __init__(self, **kwargs) -> None:
         super(TripadvisorImageAuthorshipBPRDataset, self).__init__(**kwargs)
@@ -146,7 +147,7 @@ class TripadvisorImageAuthorshipBPRDataset(TripadvisorImageAuthorshipBCEDataset)
     def _setup_bpr_dataframe(self):
         # Separate between positive and negative samples
         self.positive_samples = (
-            self.dataframe[self.dataframe[self.takeordev] == 1]
+            self.dataframe
             .sort_values(["id_user", "id_img"])
             .rename(columns={"id_img": "id_pos_img"})
             .reset_index(drop=True)

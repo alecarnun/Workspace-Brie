@@ -7,6 +7,14 @@ import torch
 
 from src import figures
 from src.models.losses import UserwiseAUCROC
+import sacrebleu
+
+def compute_sentence_bleu(reference, candidate):
+    if not isinstance(reference, str) or not isinstance(candidate, str):
+        return 0.0
+
+    bleu = sacrebleu.sentence_bleu(candidate, [reference])
+    return bleu.score / 100.0
 
 
 def get_testcase_rankingmetrics(test_case: pd.DataFrame):
@@ -51,18 +59,18 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
         # images, as a user may have >1 images per restaurant and each test case
         # only has one of them
         images_per_testcase = (
-            test_set.value_counts("id_test")
-            .reset_index()
-            .rename(columns={0: "testcase_num_images"})
+            test_set.groupby("id_test")
+            .size()
+            .reset_index(name="testcase_num_images")
         )
 
         # Compute number of photos in each user's train set
         train_photos_per_user = (
             train_set[train_set["take"] == 1]
             .drop_duplicates(keep="first")
-            .value_counts("id_user")
-            .reset_index()
-            .rename(columns={0: "author_num_train_photos"})
+            .groupby("id_user")
+            .size()
+            .reset_index(name="author_num_train_photos")
         )
 
         # # Compute the percentile metric of each test case
@@ -162,19 +170,62 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
             test_set["id_test"].isin(test_cases["id_test"])
         ].reset_index(drop=True)
 
+        print("\n--- BLEU evaluation (top-N vs user review) ---")
+
+        bleu_scores = []
+
+        top_n = 10  # puedes cambiarlo
+
+        for id_test, group in test_set.groupby("id_test", sort=False):
+            group = group.sort_values("pred", ascending=False)
+
+            # review real del usuario
+            pos_row = group[group["is_dev"] == 1]
+
+            if len(pos_row) == 0:
+                continue
+
+            reference = pos_row.iloc[0]["review_full"]
+
+            # quitar la positiva del ranking
+            group_no_pos = group[group["is_dev"] == 0]
+
+            # coger top-N negativas
+            top_candidates = group_no_pos.head(top_n)["review_full"].tolist()
+
+            # calcular BLEU para cada una
+            bleu_per_case = []
+
+            for candidate in top_candidates:
+                bleu = compute_sentence_bleu(reference, candidate)
+                bleu_per_case.append(bleu)
+
+            # media por test case
+            if len(bleu_per_case) > 0:
+                bleu_scores.append(sum(bleu_per_case) / len(bleu_per_case))
+
+        # media global
+        if len(bleu_scores) > 0:
+            mean_bleu = sum(bleu_scores) / len(bleu_scores)
+        else:
+            mean_bleu = 0.0
+
+        print(f"Mean BLEU (top-{top_n} vs user review): {mean_bleu:.3f}")
+        print("")
+
         preds = torch.tensor(test_set["pred"], dtype=torch.float)
         target = torch.tensor(test_set["is_dev"], dtype=torch.long)
         indexes = torch.tensor(test_set["id_test"], dtype=torch.long)
         # % of test cases where the image was in position k=1,2,3...10 (Recall at k)
         print("k  Recall@10  NDCG@10")
         for k in range(1, 10 + 1):
-            recall_k = torchmetrics.RetrievalRecall(k=k)(
+            recall_k = torchmetrics.RetrievalRecall(top_k=k)(
                 preds=preds, target=target, indexes=indexes
             )
             model_recall_metrics["k"].append(k)
             model_recall_metrics["Recall@10"].append(recall_k)
 
-            ndcg_k = torchmetrics.RetrievalNormalizedDCG(k=k)(
+            ndcg_k = torchmetrics.RetrievalNormalizedDCG(top_k=k)(
                 preds=preds, target=target, indexes=indexes
             )
 

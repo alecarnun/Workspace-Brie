@@ -34,7 +34,7 @@ def read_args():
     # Only in *Test* #
     parser.add_argument("--load_preds", action=BooleanOptionalAction)
 
-    # Only in PRESLEY #
+    # Only in BRIE #
     parser.add_argument("--dropout", type=float, default=0)
 
     # Only in COLLEI #
