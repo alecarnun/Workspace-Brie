@@ -4,6 +4,7 @@ import os
 import pandas as pd
 import torchmetrics
 import torch
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 from src import figures
 from src.models.losses import UserwiseAUCROC
@@ -44,6 +45,10 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
     percentile_figure_data = {"city": datamodule.city, "metrics": []}
     recall_figure_data = {"city": datamodule.city, "metrics": []}
     ndcg_figure_data = {"city": datamodule.city, "metrics": []}
+    # =========================================================
+    # LIMIT GLOBAL DEBUG (IMPORTANT)
+    # =========================================================
+    debug_max_testcases = 100
 
     for model in model_preds:
         print("=" * 50)
@@ -52,6 +57,67 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
 
         test_set = datamodule.test_dataset.dataframe
         test_set["pred"] = model_preds[model]
+
+        # =========================================================
+        # CAMBIO 1 — MODEL ONLY ONCE PER MODEL (OUTSIDE LOOP)
+        # =========================================================
+        summarizer_model_name = "google/flan-t5-base"
+
+        tokenizer = AutoTokenizer.from_pretrained(summarizer_model_name)
+        summarizer_model = AutoModelForSeq2SeqLM.from_pretrained(
+            summarizer_model_name
+        )
+        summarizer_model.eval()
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        summarizer_model.to(device)
+
+        print("\n--- SUMMARY EVALUATION (LIMITED DEBUG) ---\n")
+
+        summaries = []
+        top_n = 10
+
+        grouped = list(test_set.groupby("id_test", sort=False))[:debug_max_testcases]
+
+        for id_test, group in grouped:
+
+            group = group.sort_values("pred", ascending=False)
+
+            pos_row = group[group["is_dev"] == 1]
+            if len(pos_row) == 0:
+                continue
+
+            top_reviews = group.head(top_n)["review_full"].tolist()
+
+            input_text = "summarize the following reviews:\n\n" + "\n".join(top_reviews)
+
+            inputs = tokenizer(
+                input_text,
+                return_tensors="pt",
+                truncation=True,
+                max_length=256
+            ).to(device)
+
+            with torch.no_grad():
+                output = summarizer_model.generate(
+                    **inputs,
+                    max_length=60,
+                    num_beams=2
+                )
+
+            summary = tokenizer.decode(output[0], skip_special_tokens=True)
+            summaries.append(summary)
+
+            if len(summaries) <= 10:   # SOLO primeros 10
+                print("\n--- SAMPLE SUMMARY ---")
+                print(summary)
+                print("----------------------\n")
+
+        print(f"Generated summaries: {len(summaries)}")
+
+        # =========================================================
+        # RESTO DEL PIPELINE (UNCHANGED)
+        # =========================================================
 
         train_set = datamodule.train_dataset.dataframe
 
