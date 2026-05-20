@@ -48,7 +48,7 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
     # =========================================================
     # LIMIT GLOBAL DEBUG (IMPORTANT)
     # =========================================================
-    debug_max_testcases = 100
+    debug_max_testcases = 200
 
     for model in model_preds:
         print("=" * 50)
@@ -74,46 +74,56 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
 
         print("\n--- SUMMARY EVALUATION (LIMITED DEBUG) ---\n")
 
-        summaries = []
+        summaries_data = []
         top_n = 10
 
         grouped = list(test_set.groupby("id_test", sort=False))[:debug_max_testcases]
 
         for id_test, group in grouped:
+           group = group.sort_values("pred", ascending=False)
 
-            group = group.sort_values("pred", ascending=False)
+           pos_row = group[group["is_dev"] == 1]
+           if len(pos_row) == 0:
+               continue
 
-            pos_row = group[group["is_dev"] == 1]
-            if len(pos_row) == 0:
-                continue
+           reference = pos_row.iloc[0]["review_full"]
+           top_reviews = group.head(top_n)["review_full"].tolist()
 
-            top_reviews = group.head(top_n)["review_full"].tolist()
+           input_text = "summarize the following reviews:\n\n" + "\n".join(top_reviews)
 
-            input_text = "summarize the following reviews:\n\n" + "\n".join(top_reviews)
+           inputs = tokenizer(
+               input_text,
+               return_tensors="pt",
+               truncation=True,
+               max_length=256
+           ).to(device)
 
-            inputs = tokenizer(
-                input_text,
-                return_tensors="pt",
-                truncation=True,
-                max_length=256
-            ).to(device)
+           with torch.no_grad():
+               output = summarizer_model.generate(
+                   **inputs,
+                   max_length=60,
+                   num_beams=2
+               )
 
-            with torch.no_grad():
-                output = summarizer_model.generate(
-                    **inputs,
-                    max_length=60,
-                    num_beams=2
-                )
+           summary = tokenizer.decode(output[0], skip_special_tokens=True)
+           summaries_data.append({
+               "id_test": id_test,
+               "summary": summary,
+               "reference": reference,
+               "top_reviews": " ||| ".join(top_reviews)
+           })
 
-            summary = tokenizer.decode(output[0], skip_special_tokens=True)
-            summaries.append(summary)
+           print(f"Generated summaries: {len(summaries_data)}")
+           # =========================================================
+           # SAVE TO FILE
+           # =========================================================
 
-            if len(summaries) <= 10:   # SOLO primeros 10
-                print("\n--- SAMPLE SUMMARY ---")
-                print(summary)
-                print("----------------------\n")
+           output_path = f"docs/{datamodule.city}/summaries_{model}.csv"
 
-        print(f"Generated summaries: {len(summaries)}")
+           df_summaries = pd.DataFrame(summaries_data)
+           df_summaries.to_csv(output_path, index=False)
+
+           print(f"Summaries saved to: {output_path}")
 
         # =========================================================
         # RESTO DEL PIPELINE (UNCHANGED)
@@ -235,6 +245,10 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
         test_set = test_set[
             test_set["id_test"].isin(test_cases["id_test"])
         ].reset_index(drop=True)
+
+        if test_set.empty:
+            print("No test cases after filtering → skipping Recall/NDCG/BLEU")
+            continue
 
         print("\n--- BLEU evaluation (top-N vs user review) ---")
 
