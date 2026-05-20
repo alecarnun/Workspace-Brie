@@ -10,11 +10,11 @@ from src import figures
 from src.models.losses import UserwiseAUCROC
 import sacrebleu
 
-def compute_sentence_bleu(reference, candidate):
-    if not isinstance(reference, str) or not isinstance(candidate, str):
+def compute_bleu_multi_ref(reference_list, candidate):
+    if not reference_list or not isinstance(candidate, str):
         return 0.0
 
-    bleu = sacrebleu.sentence_bleu(candidate, [reference])
+    bleu = sacrebleu.sentence_bleu(candidate, reference_list)
     return bleu.score / 100.0
 
 
@@ -106,11 +106,31 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
                )
 
            summary = tokenizer.decode(output[0], skip_special_tokens=True)
+           # =========================================================
+           # NUEVAS MÉTRICAS (BLEU + LONGITUD)
+           # =========================================================
+
+           references = top_reviews  # múltiples referencias
+
+           bleu = compute_bleu_multi_ref(references, summary)
+
+           # Longitudes
+           summary_len = len(summary.split())
+           ref_lens = [len(r.split()) for r in references]
+           ref_len_mean = sum(ref_lens) / len(ref_lens) if ref_lens else 0
+
+           length_ratio = summary_len / ref_len_mean if ref_len_mean > 0 else 0
            summaries_data.append({
                "id_test": id_test,
                "summary": summary,
                "reference": reference,
-               "top_reviews": " ||| ".join(top_reviews)
+               "top_reviews": " ||| ".join(top_reviews),
+
+               # NUEVO
+               "bleu": bleu,
+               "summary_len": summary_len,
+               "ref_len_mean": ref_len_mean,
+               "length_ratio": length_ratio
            })
 
            print(f"Generated summaries: {len(summaries_data)}")
@@ -118,12 +138,22 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
            # SAVE TO FILE
            # =========================================================
 
-           output_path = f"docs/{datamodule.city}/summaries_{model}.csv"
+        output_path = f"docs/{datamodule.city}/summaries_{model}.csv"
 
-           df_summaries = pd.DataFrame(summaries_data)
-           df_summaries.to_csv(output_path, index=False)
+        df_summaries = pd.DataFrame(summaries_data)
+        mean_bleu = df_summaries["bleu"].mean()
+        mean_len_summary = df_summaries["summary_len"].mean()
+        mean_len_reference = df_summaries["len_reference"].mean()
 
-           print(f"Summaries saved to: {output_path}")
+        compression_ratio = mean_len_summary / mean_len_reference if mean_len_reference > 0 else 0
+
+        print(f"Mean BLEU (summary vs reference): {mean_bleu:.3f}")
+        print(f"Avg summary length: {mean_len_summary:.1f}")
+        print(f"Avg reference length: {mean_len_reference:.1f}")
+        print(f"Compression ratio: {compression_ratio:.3f}")
+
+        df_summaries.to_csv(output_path, index=False)
+        print(f"Summaries saved to: {output_path}")
 
         # =========================================================
         # RESTO DEL PIPELINE (UNCHANGED)
@@ -273,16 +303,15 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
             # coger top-N negativas
             top_candidates = group_no_pos.head(top_n)["review_full"].tolist()
 
-            # calcular BLEU para cada una
-            bleu_per_case = []
+            # calcular BLEU
+            # referencias = top reviews (las que usaste para generar el summary)
+            references = top_candidates
 
-            for candidate in top_candidates:
-                bleu = compute_sentence_bleu(reference, candidate)
-                bleu_per_case.append(bleu)
+            # candidato = summary generada
+            candidate = summary  # IMPORTANTE: usa el summary, no las reviews
 
-            # media por test case
-            if len(bleu_per_case) > 0:
-                bleu_scores.append(sum(bleu_per_case) / len(bleu_per_case))
+            bleu = compute_bleu_multi_ref(references, candidate)
+            bleu_scores.append(bleu)
 
         # media global
         if len(bleu_scores) > 0:
