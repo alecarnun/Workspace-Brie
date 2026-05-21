@@ -116,21 +116,16 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
 
            # Longitudes
            summary_len = len(summary.split())
-           ref_lens = [len(r.split()) for r in references]
-           ref_len_mean = sum(ref_lens) / len(ref_lens) if ref_lens else 0
+           reference_len = len(reference.split())
 
-           length_ratio = summary_len / ref_len_mean if ref_len_mean > 0 else 0
            summaries_data.append({
                "id_test": id_test,
                "summary": summary,
                "reference": reference,
                "top_reviews": " ||| ".join(top_reviews),
-
-               # NUEVO
-               "bleu": bleu,
                "summary_len": summary_len,
-               "ref_len_mean": ref_len_mean,
-               "length_ratio": length_ratio
+               "len_reference": reference_len,
+               "bleu": bleu
            })
 
            print(f"Generated summaries: {len(summaries_data)}")
@@ -141,6 +136,7 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
         output_path = f"docs/{datamodule.city}/summaries_{model}.csv"
 
         df_summaries = pd.DataFrame(summaries_data)
+        df_summaries.set_index("id_test", inplace=True)
         mean_bleu = df_summaries["bleu"].mean()
         mean_len_summary = df_summaries["summary_len"].mean()
         mean_len_reference = df_summaries["len_reference"].mean()
@@ -152,7 +148,7 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
         print(f"Avg reference length: {mean_len_reference:.1f}")
         print(f"Compression ratio: {compression_ratio:.3f}")
 
-        df_summaries.to_csv(output_path, index=False)
+        df_summaries.to_csv(output_path)
         print(f"Summaries saved to: {output_path}")
 
         # =========================================================
@@ -307,8 +303,10 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
             # referencias = top reviews (las que usaste para generar el summary)
             references = top_candidates
 
-            # candidato = summary generada
-            candidate = summary  # IMPORTANTE: usa el summary, no las reviews
+            if id_test not in df_summaries.index:
+                continue
+
+            candidate = df_summaries.loc[id_test, "summary"]
 
             bleu = compute_bleu_multi_ref(references, candidate)
             bleu_scores.append(bleu)
