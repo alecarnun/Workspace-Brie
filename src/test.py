@@ -301,12 +301,12 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
 
             # calcular BLEU
             # referencias = top reviews (las que usaste para generar el summary)
-            references = top_candidates
+            references = [reference]
 
             if id_test not in df_summaries.index:
                 continue
 
-            candidate = df_summaries.loc[id_test, "summary"]
+            candidate = summary
 
             bleu = compute_bleu_multi_ref(references, candidate)
             bleu_scores.append(bleu)
