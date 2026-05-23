@@ -77,48 +77,49 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
         summaries_data = []
         top_n = 10
 
-        grouped = list(test_set.groupby("id_test", sort=False))[:debug_max_testcases]
+        for i, (id_test, group) in enumerate(test_set.groupby("id_test", sort=False)):
+            if i >= debug_max_testcases:
+                break
 
-        for id_test, group in grouped:
-           group = group.sort_values("pred", ascending=False)
+            group = group.sort_values("pred", ascending=False)
 
-           pos_row = group[group["is_dev"] == 1]
-           if len(pos_row) == 0:
-               continue
+            pos_row = group[group["is_dev"] == 1]
+            if len(pos_row) == 0:
+                continue
 
-           reference = pos_row.iloc[0]["review_full"]
-           top_reviews = group.head(top_n)["review_full"].tolist()
+            reference = pos_row.iloc[0]["review_full"]
+            top_reviews = group.head(top_n)["review_full"].tolist()
 
-           input_text = "summarize the following reviews:\n\n" + "\n".join(top_reviews)
+            input_text = "summarize the following reviews:\n\n" + "\n".join(top_reviews)
 
-           inputs = tokenizer(
-               input_text,
-               return_tensors="pt",
-               truncation=True,
-               max_length=256
-           ).to(device)
+            inputs = tokenizer(
+                input_text,
+                return_tensors="pt",
+                truncation=True,
+                max_length=256
+            ).to(device)
 
-           with torch.no_grad():
+            with torch.no_grad():
                output = summarizer_model.generate(
                    **inputs,
                    max_length=60,
                    num_beams=2
-               )
+            )
 
-           summary = tokenizer.decode(output[0], skip_special_tokens=True)
-           # =========================================================
-           # NUEVAS MÉTRICAS (BLEU + LONGITUD)
-           # =========================================================
+            summary = tokenizer.decode(output[0], skip_special_tokens=True)
+            # =========================================================
+            # NUEVAS MÉTRICAS (BLEU + LONGITUD)
+            # =========================================================
 
-           references = top_reviews  # múltiples referencias
+            bleu_multi_ref = top_reviews  # múltiples referencias
 
-           bleu = compute_bleu_multi_ref(references, summary)
+            bleu = compute_bleu_multi_ref(bleu_multi_ref, summary)
 
-           # Longitudes
-           summary_len = len(summary.split())
-           reference_len = len(reference.split())
+            # Longitudes
+            summary_len = len(summary.split())
+            reference_len = len(reference.split())
 
-           summaries_data.append({
+            summaries_data.append({
                "id_test": id_test,
                "summary": summary,
                "reference": reference,
@@ -126,12 +127,12 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
                "summary_len": summary_len,
                "len_reference": reference_len,
                "bleu": bleu
-           })
+            })
 
-           print(f"Generated summaries: {len(summaries_data)}")
-           # =========================================================
-           # SAVE TO FILE
-           # =========================================================
+            print(f"[{i+1}/{debug_max_testcases}] Generated summaries: {len(summaries_data)}")
+            # =========================================================
+            # SAVE TO FILE
+            # =========================================================
 
         output_path = f"docs/{datamodule.city}/summaries_{model}.csv"
 
@@ -280,8 +281,6 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
 
         bleu_scores = []
 
-        top_n = 10  # puedes cambiarlo
-
         for id_test, group in test_set.groupby("id_test", sort=False):
             group = group.sort_values("pred", ascending=False)
 
@@ -293,22 +292,18 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
 
             reference = pos_row.iloc[0]["review_full"]
 
-            # quitar la positiva del ranking
-            group_no_pos = group[group["is_dev"] == 0]
-
-            # coger top-N negativas
-            top_candidates = group_no_pos.head(top_n)["review_full"].tolist()
-
             # calcular BLEU
             # referencias = top reviews (las que usaste para generar el summary)
-            references = [reference]
+            bleu_reference = [reference]
 
             if id_test not in df_summaries.index:
                 continue
 
-            candidate = summary
+            candidate = df_summaries.loc[id_test, "summary"]
+            if isinstance(candidate, pd.Series):
+                candidate = candidate.iloc[0]
 
-            bleu = compute_bleu_multi_ref(references, candidate)
+            bleu = compute_bleu_multi_ref(bleu_reference, candidate)
             bleu_scores.append(bleu)
 
         # media global
@@ -317,7 +312,7 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
         else:
             mean_bleu = 0.0
 
-        print(f"Mean BLEU (top-{top_n} vs user review): {mean_bleu:.3f}")
+        print(f"Mean BLEU (summary vs user reference): {mean_bleu:.3f}")
         print("")
 
         preds = torch.tensor(test_set["pred"], dtype=torch.float)
