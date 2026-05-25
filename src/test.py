@@ -9,6 +9,7 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from src import figures
 from src.models.losses import UserwiseAUCROC
 import sacrebleu
+from rouge_score import rouge_scorer
 
 def compute_bleu_multi_ref(reference_list, candidate):
     if not reference_list or not isinstance(candidate, str):
@@ -107,10 +108,28 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
             )
 
             summary = tokenizer.decode(output[0], skip_special_tokens=True)
-            # =========================================================
-            # NUEVAS MÉTRICAS (BLEU + LONGITUD)
-            # =========================================================
+            # =========================
+            # MÉTRICAS POR SUMMARY
+            # =========================
 
+            references = top_reviews  # múltiples referencias
+
+            bleu = compute_bleu_multi_ref(references, summary)
+
+            # Longitudes
+            summary_len = len(summary.split())
+            reference_len = len(reference.split())
+
+            # Longitud media de las reviews usadas
+            ref_lens = [len(r.split()) for r in references]
+            ref_len_mean = sum(ref_lens) / len(ref_lens) if ref_lens else 0
+
+            # Ratio de compresión
+            length_ratio = summary_len / ref_len_mean if ref_len_mean > 0 else 0
+            # =========================================================
+            # NUEVAS MÉTRICAS:
+            # =========================================================
+            # BLEU
             bleu_multi_ref = top_reviews  # múltiples referencias
 
             bleu = compute_bleu_multi_ref(bleu_multi_ref, summary)
@@ -119,14 +138,38 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
             summary_len = len(summary.split())
             reference_len = len(reference.split())
 
+            # Distinct_1 / Distinct-2 (diversidad lexica)
+            tokens = summary.split()
+
+            distinct_1 = len(set(tokens)) / len(tokens) if tokens else 0
+
+            bigrams = list(zip(tokens, tokens[1:]))
+            distinct_2 = len(set(bigrams)) / len(bigrams) if bigrams else 0
+
+            # Coverage (cuánto del input aparece en el summary)
+            input_words = set(" ".join(top_reviews).split())
+            summary_words = set(summary.split())
+
+            coverage = len(summary_words & input_words) / len(summary_words) if summary_words else 0
+
+            # ROUGE
+            scorer = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
+            rouge = scorer.score(reference, summary)["rougeL"].fmeasure
+
             summaries_data.append({
-               "id_test": id_test,
-               "summary": summary,
-               "reference": reference,
-               "top_reviews": " ||| ".join(top_reviews),
-               "summary_len": summary_len,
-               "len_reference": reference_len,
-               "bleu": bleu
+                "id_test": id_test,
+                "summary": summary,
+                "reference": reference,
+                "top_reviews": " ||| ".join(top_reviews),
+                "summary_len": summary_len,
+                "len_reference": reference_len,
+                "ref_len_mean": ref_len_mean,
+                "length_ratio": length_ratio,
+                "bleu": bleu,
+                "distinct_1": distinct_1,
+                "distinct_2": distinct_2,
+                "coverage": coverage,
+                "rouge": rouge
             })
 
             print(f"[{i+1}/{debug_max_testcases}] Generated summaries: {len(summaries_data)}")
@@ -141,13 +184,20 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
         mean_bleu = df_summaries["bleu"].mean()
         mean_len_summary = df_summaries["summary_len"].mean()
         mean_len_reference = df_summaries["len_reference"].mean()
-
-        compression_ratio = mean_len_summary / mean_len_reference if mean_len_reference > 0 else 0
+        mean_length_ratio = df_summaries["length_ratio"].mean()
+        mean_distinct_1 = df_summaries["distinct_1"].mean()
+        mean_distinct_2 = df_summaries["distinct_2"].mean()
+        mean_coverage = df_summaries["coverage"].mean()
+        mean_rouge = df_summaries["rouge"].mean()
 
         print(f"Mean BLEU (summary vs reference): {mean_bleu:.3f}")
         print(f"Avg summary length: {mean_len_summary:.1f}")
         print(f"Avg reference length: {mean_len_reference:.1f}")
-        print(f"Compression ratio: {compression_ratio:.3f}")
+        print(f"Avg compression ratio: {mean_length_ratio:.3f}")
+        print(f"Avg distinct-1: {mean_distinct_1:.3f}")
+        print(f"Avg distinct-2: {mean_distinct_2:.3f}")
+        print(f"Avg coverage: {mean_coverage:.3f}")
+        print(f"Avg rouge: {mean_rouge:.3f}")
 
         df_summaries.to_csv(output_path)
         print(f"Summaries saved to: {output_path}")
