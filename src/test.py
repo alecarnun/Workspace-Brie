@@ -1,6 +1,5 @@
-import json
 from os import makedirs
-import os
+import numpy as np
 import pandas as pd
 import torchmetrics
 import torch
@@ -41,15 +40,31 @@ def get_testcase_rankingmetrics(test_case: pd.DataFrame):
 
 def test_tripadvisor_authorship_task(datamodule, model_preds, args):
     makedirs("docs/" + datamodule.city, exist_ok=True)
+    makedirs("figures/" + datamodule.city, exist_ok=True)
 
     # Data for the percentile figures
     percentile_figure_data = {"city": datamodule.city, "metrics": []}
+    bleu_figure_data = {"city": datamodule.city, "metrics": []}
     recall_figure_data = {"city": datamodule.city, "metrics": []}
     ndcg_figure_data = {"city": datamodule.city, "metrics": []}
     # =========================================================
     # LIMIT GLOBAL DEBUG (IMPORTANT)
     # =========================================================
-    debug_max_testcases = 200
+    debug_max_testcases = 700
+
+    # =========================================================
+    # CAMBIO 1 — MODEL ONLY ONCE PER MODEL (OUTSIDE LOOP)
+    # =========================================================
+    summarizer_model_name = "google/flan-t5-base"
+
+    tokenizer = AutoTokenizer.from_pretrained(summarizer_model_name)
+    summarizer_model = AutoModelForSeq2SeqLM.from_pretrained(
+        summarizer_model_name
+    )
+    summarizer_model.eval()
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    summarizer_model.to(device)
 
     for model in model_preds:
         print("=" * 50)
@@ -58,20 +73,6 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
 
         test_set = datamodule.test_dataset.dataframe
         test_set["pred"] = model_preds[model]
-
-        # =========================================================
-        # CAMBIO 1 — MODEL ONLY ONCE PER MODEL (OUTSIDE LOOP)
-        # =========================================================
-        summarizer_model_name = "google/flan-t5-base"
-
-        tokenizer = AutoTokenizer.from_pretrained(summarizer_model_name)
-        summarizer_model = AutoModelForSeq2SeqLM.from_pretrained(
-            summarizer_model_name
-        )
-        summarizer_model.eval()
-
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        summarizer_model.to(device)
 
         print("\n--- SUMMARY EVALUATION (LIMITED DEBUG) ---\n")
 
@@ -109,50 +110,27 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
 
             summary = tokenizer.decode(output[0], skip_special_tokens=True)
             # =========================
-            # MÉTRICAS POR SUMMARY
+            # MÉTRICAS
             # =========================
+            bleu = compute_bleu_multi_ref(top_reviews, summary)
 
-            references = top_reviews  # múltiples referencias
-
-            bleu = compute_bleu_multi_ref(references, summary)
-
-            # Longitudes
-            summary_len = len(summary.split())
+            tokens = summary.split()
+            summary_len = len(tokens)
             reference_len = len(reference.split())
 
-            # Longitud media de las reviews usadas
-            ref_lens = [len(r.split()) for r in references]
+            ref_lens = [len(r.split()) for r in top_reviews]
             ref_len_mean = sum(ref_lens) / len(ref_lens) if ref_lens else 0
 
-            # Ratio de compresión
             length_ratio = summary_len / ref_len_mean if ref_len_mean > 0 else 0
-            # =========================================================
-            # NUEVAS MÉTRICAS:
-            # =========================================================
-            # BLEU
-            bleu_multi_ref = top_reviews  # múltiples referencias
-
-            bleu = compute_bleu_multi_ref(bleu_multi_ref, summary)
-
-            # Longitudes
-            summary_len = len(summary.split())
-            reference_len = len(reference.split())
-
-            # Distinct_1 / Distinct-2 (diversidad lexica)
-            tokens = summary.split()
 
             distinct_1 = len(set(tokens)) / len(tokens) if tokens else 0
-
             bigrams = list(zip(tokens, tokens[1:]))
             distinct_2 = len(set(bigrams)) / len(bigrams) if bigrams else 0
 
-            # Coverage (cuánto del input aparece en el summary)
             input_words = set(" ".join(top_reviews).split())
-            summary_words = set(summary.split())
-
+            summary_words = set(tokens)
             coverage = len(summary_words & input_words) / len(summary_words) if summary_words else 0
 
-            # ROUGE
             scorer = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
             rouge = scorer.score(reference, summary)["rougeL"].fmeasure
 
@@ -160,7 +138,6 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
                 "id_test": id_test,
                 "summary": summary,
                 "reference": reference,
-                "top_reviews": " ||| ".join(top_reviews),
                 "summary_len": summary_len,
                 "len_reference": reference_len,
                 "ref_len_mean": ref_len_mean,
@@ -181,73 +158,94 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
 
         df_summaries = pd.DataFrame(summaries_data)
         df_summaries.set_index("id_test", inplace=True)
-        mean_bleu = df_summaries["bleu"].mean()
-        mean_len_summary = df_summaries["summary_len"].mean()
-        mean_len_reference = df_summaries["len_reference"].mean()
-        mean_length_ratio = df_summaries["length_ratio"].mean()
-        mean_distinct_1 = df_summaries["distinct_1"].mean()
-        mean_distinct_2 = df_summaries["distinct_2"].mean()
-        mean_coverage = df_summaries["coverage"].mean()
-        mean_rouge = df_summaries["rouge"].mean()
-
-        print(f"Mean BLEU (summary vs reference): {mean_bleu:.3f}")
-        print(f"Avg summary length: {mean_len_summary:.1f}")
-        print(f"Avg reference length: {mean_len_reference:.1f}")
-        print(f"Avg compression ratio: {mean_length_ratio:.3f}")
-        print(f"Avg distinct-1: {mean_distinct_1:.3f}")
-        print(f"Avg distinct-2: {mean_distinct_2:.3f}")
-        print(f"Avg coverage: {mean_coverage:.3f}")
-        print(f"Avg rouge: {mean_rouge:.3f}")
 
         df_summaries.to_csv(output_path)
         print(f"Summaries saved to: {output_path}")
 
         # =========================================================
-        # RESTO DEL PIPELINE (UNCHANGED)
+        # MERGE WITH USER INFO
         # =========================================================
 
         train_set = datamodule.train_dataset.dataframe
 
-        # Get no. of images in each test case: not the same unique restaurant
-        # images, as a user may have >1 images per restaurant and each test case
-        # only has one of them
+        train_photos_per_user = (
+            train_set[train_set["take"] == 1]
+            .drop_duplicates()
+            .groupby("id_user")
+            .size()
+            .reset_index(name="author_num_train_photos")
+        )
+
+        test_cases = (
+            test_set.groupby("id_test")
+            .apply(get_testcase_rankingmetrics)
+            .reset_index()
+        )
+
+        test_cases = pd.merge(
+            test_cases,
+            train_photos_per_user,
+            on="id_user",
+            how="inner"
+        )
+
+        df_analysis = pd.merge(
+            df_summaries.reset_index(),
+            test_cases[["id_test", "author_num_train_photos"]],
+            on="id_test",
+            how="inner"
+        )
+
+        bleu_by_photos = {
+            "min_photos": [],
+            "num_cases": [],
+            "mean_bleu": []
+        }
+
+        min_support = 20
+
+        for i in range(1, 101):
+            subset = df_analysis[df_analysis["author_num_train_photos"] >= i]
+
+            bleu_by_photos["min_photos"].append(i)
+            bleu_by_photos["num_cases"].append(len(subset))
+
+            if len(subset) >= min_support:
+                bleu_by_photos["mean_bleu"].append(subset["bleu"].mean())
+            else:
+                bleu_by_photos["mean_bleu"].append(np.nan)
+
+        bleu_figure_data["metrics"].append({
+            "model_name": model,
+            "min_photos": list(range(1, 101)),
+            "mean_bleu": bleu_by_photos["mean_bleu"]
+        })
+
+        df_bleu = pd.DataFrame(bleu_by_photos)
+
+        output_bleu = f"docs/{datamodule.city}/bleu_by_photos_{model}.csv"
+        df_bleu.to_csv(output_bleu, index=False)
+
+        print(f"BLEU by photos saved to: {output_bleu}")
+
+        # =========================================================
+        # PERCENTILE METRICS (ORIGINAL PIPELINE)
+        # =========================================================
         images_per_testcase = (
             test_set.groupby("id_test")
             .size()
             .reset_index(name="testcase_num_images")
         )
 
-        # Compute number of photos in each user's train set
-        train_photos_per_user = (
-            train_set[train_set["take"] == 1]
-            .drop_duplicates(keep="first")
-            .groupby("id_user")
-            .size()
-            .reset_index(name="author_num_train_photos")
-        )
-
-        # # Compute the percentile metric of each test case
-        test_cases = (
-            test_set.groupby("id_test").apply(get_testcase_rankingmetrics).reset_index()
-        )
-
-        # Add the user and subreddit information
-        test_cases = pd.merge(
-            test_cases,
-            train_photos_per_user,
-            left_on="id_user",
-            right_on="id_user",
-            how="inner",
-        )
         test_cases = pd.merge(
             test_cases,
             images_per_testcase,
-            left_on="id_test",
-            right_on="id_test",
-            how="inner",
+            on="id_test",
+            how="inner"
         )
 
-        # Initialize figure data
+        test_cases = test_cases[test_cases["testcase_num_images"] >= 10]
+
         model_percentile_metrics = {
             "min_photos": [],
             "num_test_cases": [],
@@ -255,63 +253,18 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
             "model_name": model,
         }
 
-        preds = torch.tensor(test_set["pred"], dtype=torch.float)
-        target = torch.tensor(test_set["is_dev"], dtype=torch.long)
-        indexes = torch.tensor(test_set["id_test"], dtype=torch.long)
-        model_userwise_auroc = UserwiseAUCROC()(
-            indexes=indexes, target=target, preds=preds
-        )
-        print("")
-        print(f"AUC (all users, all test cases): {model_userwise_auroc:.3f}")
-        print("")
-
-        # Load file numfactors_results.json with json package if it exists, otherwise create it
-        if model != "RANDOM" and model != "CNT":
-            try:
-                with open(f"results/numfactors_results.json", "r") as f:
-                    numfactors_results = json.load(f)
-            except FileNotFoundError:
-                if not os.path.exists("results"):
-                    os.makedirs("results")
-                numfactors_results = {}
-
-            # Save the auroc for this city, model and num_factors
-            if args.city not in numfactors_results:
-                numfactors_results[args.city] = {}
-            if args.model[0] not in numfactors_results[args.city]:
-                numfactors_results[args.city][args.model[0]] = {}
-            if str(args.d) not in numfactors_results[args.city][args.model[0]]:
-                print(f"Saving {args.city}, {args.model[0]}, {args.d}")
-                numfactors_results[args.city][args.model[0]].update(
-                    {args.d: float(model_userwise_auroc)}
-                )
-            else:
-                print(
-                    f"Already exists: {args.city}, {args.model[0]}, {args.d}, AUROC: {numfactors_results[args.city][args.model[0]][str(args.d)]}"
-                )
-
-            # Save the results
-            with open(f"results/numfactors_results.json", "w") as f:
-                json.dump(numfactors_results, f)
-
-        # We only take into account restaurants with >10 photos
-        test_cases = test_cases[test_cases["testcase_num_images"] >= 10]
-
-        # Compute percentile figure metrics
-        print(f"Min. imgs  Percentile  Test Cases")
         for i in range(1, 101):
-            percentiles = test_cases[test_cases["author_num_train_photos"] >= i][
-                "percentile"
-            ]
+            percentiles = test_cases[
+                test_cases["author_num_train_photos"] >= i
+                ]["percentile"]
 
             model_percentile_metrics["min_photos"].append(i)
             model_percentile_metrics["num_test_cases"].append(len(percentiles))
             model_percentile_metrics["median_percentile"].append(percentiles.median())
 
-        #     print(f"{i:<11}{percentiles.median():<12.3f}({len(percentiles)})")
         percentile_figure_data["metrics"].append(model_percentile_metrics)
 
-        # For the recall metric, only include users with >= train images
+       # For the recall metric, only include users with >= train images
 
         test_cases = test_cases[test_cases["author_num_train_photos"] >= 10]
 
@@ -327,42 +280,6 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
             print("No test cases after filtering → skipping Recall/NDCG/BLEU")
             continue
 
-        print("\n--- BLEU evaluation (top-N vs user review) ---")
-
-        bleu_scores = []
-
-        for id_test, group in test_set.groupby("id_test", sort=False):
-            group = group.sort_values("pred", ascending=False)
-
-            # review real del usuario
-            pos_row = group[group["is_dev"] == 1]
-
-            if len(pos_row) == 0:
-                continue
-
-            reference = pos_row.iloc[0]["review_full"]
-
-            # calcular BLEU
-            # referencias = top reviews (las que usaste para generar el summary)
-            bleu_reference = [reference]
-
-            if id_test not in df_summaries.index:
-                continue
-
-            candidate = df_summaries.loc[id_test, "summary"]
-            if isinstance(candidate, pd.Series):
-                candidate = candidate.iloc[0]
-
-            bleu = compute_bleu_multi_ref(bleu_reference, candidate)
-            bleu_scores.append(bleu)
-
-        # media global
-        if len(bleu_scores) > 0:
-            mean_bleu = sum(bleu_scores) / len(bleu_scores)
-        else:
-            mean_bleu = 0.0
-
-        print(f"Mean BLEU (summary vs user reference): {mean_bleu:.3f}")
         print("")
 
         preds = torch.tensor(test_set["pred"], dtype=torch.float)
@@ -400,3 +317,4 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
     # figures.retrieval_figure(recall_figure_data, "Recall@10")
     # figures.retrieval_figure(ndcg_figure_data, "NDCG@10")
     figures.percentile_figure(percentile_figure_data)
+    figures.bleu_figure(bleu_figure_data)

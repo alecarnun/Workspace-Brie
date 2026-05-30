@@ -100,3 +100,34 @@ def retrieval_figure(data: dict, metric_name: str):
     # Output
     plt.savefig(f'docs/{data["city"]}/{metric_name}.pdf', bbox_inches="tight")
     plt.show()
+
+def bleu_figure(data: dict):
+    rcParams["figure.figsize"] = 9, 5
+    plt.rcParams.update({"font.size": 17})
+
+    for metrics in data["metrics"]:
+        plt.plot(
+            metrics["min_photos"],
+            metrics["mean_bleu"],
+            linewidth=3.0,
+            label=metrics["model_name"],
+            alpha=0.8,
+            color=PLOT_COLORS.get(metrics["model_name"], "black"),
+        )
+
+    plt.xlabel("Users with ≥x train images")
+    plt.ylabel("Mean BLEU")
+
+    plt.xlim(0, 100)
+    plt.ylim(0, 0.4)
+
+    plt.grid(True, linestyle="--", color="lightgray")
+    plt.legend(loc="upper right")
+
+    plt.title(data["city"])
+    plt.tight_layout()
+
+    plt.savefig(
+        f'figures/{data["city"]}/bleu_{data["city"]}.pdf',
+        bbox_inches="tight"
+    )
