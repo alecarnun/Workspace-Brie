@@ -14,9 +14,22 @@ def compute_bleu_multi_ref(reference_list, candidate):
     if not reference_list or not isinstance(candidate, str):
         return 0.0
 
-    bleu = sacrebleu.sentence_bleu(candidate, reference_list)
-    return bleu.score / 100.0
+    reference_list = [
+        str(r) for r in reference_list
+        if r is not None and str(r).strip() != ""
+    ]
 
+    if len(reference_list) == 0:
+        return 0.0
+
+    bleu = sacrebleu.BLEU(effective_order=True)
+
+    score = bleu.sentence_score(
+        hypothesis=candidate,
+        references=reference_list
+    )
+
+    return score.score / 100
 
 def get_testcase_rankingmetrics(test_case: pd.DataFrame):
     # Input: model probabilities and targets of a test case
@@ -50,12 +63,12 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
     # =========================================================
     # LIMIT GLOBAL DEBUG (IMPORTANT)
     # =========================================================
-    debug_max_testcases = 700
+    debug_max_testcases = 1500
 
     # =========================================================
     # CAMBIO 1 — MODEL ONLY ONCE PER MODEL (OUTSIDE LOOP)
     # =========================================================
-    summarizer_model_name = "google/flan-t5-base"
+    summarizer_model_name = "google/flan-t5-large"
 
     tokenizer = AutoTokenizer.from_pretrained(summarizer_model_name)
     summarizer_model = AutoModelForSeq2SeqLM.from_pretrained(
@@ -79,6 +92,9 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
         summaries_data = []
         top_n = 10
 
+        running_bleu = []
+        running_rouge = []
+
         for i, (id_test, group) in enumerate(test_set.groupby("id_test", sort=False)):
             if i >= debug_max_testcases:
                 break
@@ -89,10 +105,15 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
             if len(pos_row) == 0:
                 continue
 
-            reference = pos_row.iloc[0]["review_full"]
+            references = group["review_full"].dropna().tolist()
+            references = list(dict.fromkeys(references))
             top_reviews = group.head(top_n)["review_full"].tolist()
 
-            input_text = "summarize the following reviews:\n\n" + "\n".join(top_reviews)
+            input_text = (
+                    "You are summarizing restaurant reviews.\n"
+                    "Write a concise overall opinion.\n\n"
+                    + "\n\n".join(top_reviews[:8])
+            )
 
             inputs = tokenizer(
                 input_text,
@@ -109,14 +130,18 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
             )
 
             summary = tokenizer.decode(output[0], skip_special_tokens=True)
+            if i < 3:
+                print("\n--- DEBUG SAMPLE ---")
+                print("SUMMARY:", summary)
+                print("REF SAMPLE:", references[:2])
             # =========================
             # MÉTRICAS
             # =========================
-            bleu = compute_bleu_multi_ref(top_reviews, summary)
+            bleu = compute_bleu_multi_ref(references, summary)
 
             tokens = summary.split()
             summary_len = len(tokens)
-            reference_len = len(reference.split())
+            reference_len = len(" ".join(references).split())
 
             ref_lens = [len(r.split()) for r in top_reviews]
             ref_len_mean = sum(ref_lens) / len(ref_lens) if ref_lens else 0
@@ -132,12 +157,18 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
             coverage = len(summary_words & input_words) / len(summary_words) if summary_words else 0
 
             scorer = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
-            rouge = scorer.score(reference, summary)["rougeL"].fmeasure
+            rouge = max(
+                scorer.score(ref, summary)["rougeL"].fmeasure
+                for ref in references
+            ) if references else 0.0
+
+            running_bleu.append(bleu)
+            running_rouge.append(rouge)
 
             summaries_data.append({
                 "id_test": id_test,
                 "summary": summary,
-                "reference": reference,
+                "reference": " ||| ".join(references),
                 "summary_len": summary_len,
                 "len_reference": reference_len,
                 "ref_len_mean": ref_len_mean,
@@ -149,6 +180,12 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
                 "rouge": rouge
             })
 
+            if (i + 1) % 50 == 0:
+                print(
+                    f"[INTERIM] BLEU mean: {np.mean(running_bleu):.4f} | "
+                    f"ROUGE mean: {np.mean(running_rouge):.4f}"
+                )
+
             print(f"[{i+1}/{debug_max_testcases}] Generated summaries: {len(summaries_data)}")
             # =========================================================
             # SAVE TO FILE
@@ -158,6 +195,14 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
 
         df_summaries = pd.DataFrame(summaries_data)
         df_summaries.set_index("id_test", inplace=True)
+
+        mean_bleu = df_summaries["bleu"].mean()
+        mean_rouge = df_summaries["rouge"].mean()
+
+        print(f"\nGLOBAL METRICS ({model})")
+        print(f"Mean BLEU  : {mean_bleu:.4f}")
+        print(f"Mean ROUGE : {mean_rouge:.4f}")
+        print("")
 
         df_summaries.to_csv(output_path)
         print(f"Summaries saved to: {output_path}")
@@ -199,7 +244,8 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
         bleu_by_photos = {
             "min_photos": [],
             "num_cases": [],
-            "mean_bleu": []
+            "mean_bleu": [],
+            "mean_rouge": []
         }
 
         min_support = 20
@@ -212,8 +258,10 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
 
             if len(subset) >= min_support:
                 bleu_by_photos["mean_bleu"].append(subset["bleu"].mean())
+                bleu_by_photos["mean_rouge"].append(subset["rouge"].mean())
             else:
                 bleu_by_photos["mean_bleu"].append(np.nan)
+                bleu_by_photos["mean_rouge"].append(np.nan)
 
         bleu_figure_data["metrics"].append({
             "model_name": model,
