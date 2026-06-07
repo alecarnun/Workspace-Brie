@@ -109,7 +109,20 @@ def bleu_figure(data: dict):
 
     plt.xlabel("Users with ≥x train images")
     plt.ylabel("Mean BLEU")
-    plt.xlim(0, 100)
+    all_x = []
+
+    for metrics in data["metrics"]:
+        x = np.array(metrics["min_photos"])
+        y = np.array(metrics["mean_bleu"])
+
+        mask = ~np.isnan(y)
+        x = x[mask]
+
+        all_x.append(x)
+
+    if all_x:
+        xmax = max([x.max() for x in all_x])
+        plt.xlim(0, xmax + 2)
     plt.ylim(0, 1)
     plt.grid(True, linestyle="--", alpha=0.5)
     plt.legend()
