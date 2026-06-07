@@ -12,62 +12,52 @@ PLOT_COLORS = {
 
 
 def percentile_figure(data: dict):
-    rcParams["figure.figsize"] = 9, 5
-    # Font size
+    fig, ax1 = plt.subplots(figsize=(9, 5))
+
+    ax2 = ax1.twinx()
+
     plt.rcParams.update({"font.size": 17})
 
-    # Left plot : percentile metric
+    # LEFT AXIS (percentile curves)
     for metrics in data["metrics"]:
-        plt.plot(
+        ax1.plot(
             metrics["min_photos"],
             metrics["median_percentile"],
             linewidth=3.0,
-            label=metrics["model_name"]
-            if metrics["model_name"] != "BRIE"
-            else "BRIE",
+            label=metrics["model_name"],
             alpha=0.8,
-            color=PLOT_COLORS[metrics["model_name"]],
+            color=PLOT_COLORS.get(metrics["model_name"], "gray"),
         )
 
-    # Unicode character for geq
+    ax1.set_xlabel("Users with ≥x train images")
+    ax1.set_ylabel("Median percentile of author's image")
+    ax1.set_xlim(0, 100)
+    ax1.set_ylim(0, 1)
+    ax1.grid(True, linestyle="--", color="lightgray")
 
-    plt.xlabel("Users with \u2265x train images")
-    plt.ylabel("Median percentile\nof author's image")
+    # RIGHT AXIS (test cases)
+    for metrics in data["metrics"]:
+        ax2.plot(
+            metrics["min_photos"],
+            metrics["num_test_cases"],
+            linewidth=2.5,
+            color="black",
+            alpha=0.3,
+        )
 
-    plt.xlim(0, 100)
-    plt.ylim(0, 1)
+    ax2.set_ylabel("Test cases")
+    ax2.set_yscale("log")
 
-    # plt.xticks([1] + list(range(5, 101, 5)))
-    # plt.yticks(np.arange(0, 1 + 0.1, 0.1))
+    ax1.set_title(data["city"])
 
-    plt.grid(True, linestyle="--", color="lightgray")
-    if data["city"] == "gijon":
-        plt.legend(loc="upper left")
+    ax1.legend(loc="upper left")
+
     plt.tight_layout()
-
-    # Right plot: test cases
-    plt.twinx()
-    plt.plot(
-        metrics["min_photos"],
-        metrics["num_test_cases"],
-        linewidth=3.0,
-        color="black",
-        label="Test cases",
-        alpha=0.3,
-    )
-
-    plt.ylabel("Test cases")
-    plt.yscale("log")
-
-    if data["city"] == "gijon":
-        plt.legend(loc="upper right")
-
-    plt.title(data["city"])
-    # Output
     plt.savefig(
-        f'figures/{data["city"]}/percentile_{data["city"]}.pdf', bbox_inches="tight"
+        f'figures/{data["city"]}/percentile_{data["city"]}.pdf',
+        bbox_inches="tight"
     )
-    # plt.show()
+    plt.close()
 
 
 def retrieval_figure(data: dict, metric_name: str):
@@ -102,32 +92,29 @@ def retrieval_figure(data: dict, metric_name: str):
     plt.show()
 
 def bleu_figure(data: dict):
-    rcParams["figure.figsize"] = 9, 5
-    plt.rcParams.update({"font.size": 17})
+    plt.figure(figsize=(9, 5))
 
     for metrics in data["metrics"]:
+        x = np.array(metrics["min_photos"])
+        y = np.array(metrics["mean_bleu"])
+
+        mask = ~np.isnan(y)
+
         plt.plot(
-            metrics["min_photos"],
-            metrics["mean_bleu"],
-            linewidth=3.0,
+            x[mask],
+            y[mask],
             label=metrics["model_name"],
-            alpha=0.8,
-            color=PLOT_COLORS.get(metrics["model_name"], "black"),
+            linewidth=3
         )
 
     plt.xlabel("Users with ≥x train images")
     plt.ylabel("Mean BLEU")
-
     plt.xlim(0, 100)
-    plt.ylim(0, 0.4)
-
-    plt.grid(True, linestyle="--", color="lightgray")
-    plt.legend(loc="upper right")
-
+    plt.ylim(0, 1)
+    plt.grid(True, linestyle="--", alpha=0.5)
+    plt.legend()
     plt.title(data["city"])
     plt.tight_layout()
 
-    plt.savefig(
-        f'figures/{data["city"]}/bleu_{data["city"]}.pdf',
-        bbox_inches="tight"
-    )
+    plt.savefig(f'figures/{data["city"]}/bleu_{data["city"]}.pdf')
+    plt.close()

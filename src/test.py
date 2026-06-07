@@ -63,12 +63,12 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
     # =========================================================
     # LIMIT GLOBAL DEBUG (IMPORTANT)
     # =========================================================
-    debug_max_testcases = 1500
+    debug_max_testcases = 2000
 
     # =========================================================
     # CAMBIO 1 — MODEL ONLY ONCE PER MODEL (OUTSIDE LOOP)
     # =========================================================
-    summarizer_model_name = "google/flan-t5-large"
+    summarizer_model_name = "facebook/BART-large-CNN"
 
     tokenizer = AutoTokenizer.from_pretrained(summarizer_model_name)
     summarizer_model = AutoModelForSeq2SeqLM.from_pretrained(
@@ -241,35 +241,29 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
             how="inner"
         )
 
-        bleu_by_photos = {
-            "min_photos": [],
-            "num_cases": [],
-            "mean_bleu": [],
-            "mean_rouge": []
-        }
-
-        min_support = 20
+        rows = []
 
         for i in range(1, 101):
             subset = df_analysis[df_analysis["author_num_train_photos"] >= i]
 
-            bleu_by_photos["min_photos"].append(i)
-            bleu_by_photos["num_cases"].append(len(subset))
+            rows.append({
+                "min_photos": i,
+                "num_cases": len(subset),
+                "mean_bleu": subset["bleu"].mean() if len(subset) > 0 else np.nan,
+                "mean_rouge": subset["rouge"].mean() if len(subset) > 0 else np.nan,
+            })
 
-            if len(subset) >= min_support:
-                bleu_by_photos["mean_bleu"].append(subset["bleu"].mean())
-                bleu_by_photos["mean_rouge"].append(subset["rouge"].mean())
-            else:
-                bleu_by_photos["mean_bleu"].append(np.nan)
-                bleu_by_photos["mean_rouge"].append(np.nan)
+        df_bleu = pd.DataFrame(rows)
 
         bleu_figure_data["metrics"].append({
             "model_name": model,
-            "min_photos": list(range(1, 101)),
-            "mean_bleu": bleu_by_photos["mean_bleu"]
+            "min_photos": df_bleu["min_photos"].tolist(),
+            "mean_bleu": df_bleu["mean_bleu"].tolist(),
         })
 
-        df_bleu = pd.DataFrame(bleu_by_photos)
+        if model == "BRIE":
+            print("Generando gráfica BLEU para BRIE...")
+            figures.bleu_figure({"city": datamodule.city, "metrics": bleu_figure_data["metrics"]})
 
         output_bleu = f"docs/{datamodule.city}/bleu_by_photos_{model}.csv"
         df_bleu.to_csv(output_bleu, index=False)
@@ -365,4 +359,5 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
     # figures.retrieval_figure(recall_figure_data, "Recall@10")
     # figures.retrieval_figure(ndcg_figure_data, "NDCG@10")
     figures.percentile_figure(percentile_figure_data)
+    print("BLEU metrics length:", len(bleu_figure_data["metrics"]))
     figures.bleu_figure(bleu_figure_data)
