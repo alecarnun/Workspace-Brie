@@ -58,6 +58,7 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
     # Data for the percentile figures
     percentile_figure_data = {"city": datamodule.city, "metrics": []}
     bleu_figure_data = {"city": datamodule.city, "metrics": []}
+    rouge_figure_data = {"city": datamodule.city, "metrics": []}
     recall_figure_data = {"city": datamodule.city, "metrics": []}
     ndcg_figure_data = {"city": datamodule.city, "metrics": []}
     # =========================================================
@@ -261,6 +262,12 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
             "mean_bleu": df_bleu["mean_bleu"].tolist(),
         })
 
+        rouge_figure_data["metrics"].append({
+            "model_name": model,
+            "min_photos": df_bleu["min_photos"].tolist(),
+            "mean_rouge": df_bleu["mean_rouge"].tolist(),
+        })
+
         if model == "BRIE":
             print("Generando gráfica BLEU para BRIE...")
             figures.bleu_figure({"city": datamodule.city, "metrics": bleu_figure_data["metrics"]})
@@ -361,3 +368,4 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
     figures.percentile_figure(percentile_figure_data)
     print("BLEU metrics length:", len(bleu_figure_data["metrics"]))
     figures.bleu_figure(bleu_figure_data)
+    figures.rouge_figure(rouge_figure_data)

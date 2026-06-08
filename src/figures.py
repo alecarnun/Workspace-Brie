@@ -94,9 +94,52 @@ def retrieval_figure(data: dict, metric_name: str):
 def bleu_figure(data: dict):
     plt.figure(figsize=(9, 5))
 
+    xmax = 0
+
     for metrics in data["metrics"]:
         x = np.array(metrics["min_photos"])
         y = np.array(metrics["mean_bleu"])
+
+        mask = ~np.isnan(y)
+
+        x_valid = x[mask]
+        y_valid = y[mask]
+
+        if len(x_valid) == 0:
+            continue
+
+        plt.plot(
+            x_valid,
+            y_valid,
+            label=metrics["model_name"],
+            linewidth=3
+        )
+
+        xmax = max(xmax, x_valid.max())
+
+    plt.xlabel("Users with ≥x train images")
+    plt.ylabel("Mean BLEU")
+
+    if xmax > 0:
+        plt.xlim(0, xmax + 2)
+    else:
+        plt.xlim(0, 100)
+
+    plt.ylim(0, 1)
+    plt.grid(True, linestyle="--", alpha=0.5)
+    plt.legend()
+    plt.title(data["city"])
+    plt.tight_layout()
+
+    plt.savefig(f'figures/{data["city"]}/bleu_{data["city"]}.pdf')
+    plt.close()
+
+def rouge_figure(data: dict):
+    plt.figure(figsize=(9, 5))
+
+    for metrics in data["metrics"]:
+        x = np.array(metrics["min_photos"])
+        y = np.array(metrics["mean_rouge"])
 
         mask = ~np.isnan(y)
 
@@ -108,26 +151,12 @@ def bleu_figure(data: dict):
         )
 
     plt.xlabel("Users with ≥x train images")
-    plt.ylabel("Mean BLEU")
-    all_x = []
-
-    for metrics in data["metrics"]:
-        x = np.array(metrics["min_photos"])
-        y = np.array(metrics["mean_bleu"])
-
-        mask = ~np.isnan(y)
-        x = x[mask]
-
-        all_x.append(x)
-
-    if all_x:
-        xmax = max([x.max() for x in all_x])
-        plt.xlim(0, xmax + 2)
+    plt.ylabel("Mean ROUGE")
     plt.ylim(0, 1)
     plt.grid(True, linestyle="--", alpha=0.5)
     plt.legend()
     plt.title(data["city"])
     plt.tight_layout()
 
-    plt.savefig(f'figures/{data["city"]}/bleu_{data["city"]}.pdf')
+    plt.savefig(f'figures/{data["city"]}/rouge_{data["city"]}.pdf')
     plt.close()
