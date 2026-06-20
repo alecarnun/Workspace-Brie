@@ -3,11 +3,10 @@ from matplotlib import rcParams
 import numpy as np
 
 PLOT_COLORS = {
-    "ELVis": "g",
-    "BRIE": "r",
-    "MF_ELVis": "b",
-    "RANDOM": "y",
-    "CNT": "purple",
+    "BRIE": "blue",
+    "BRIE+SUM": "green",
+    "RANDOM": "orange",
+    "CNT": "red",
 }
 
 
@@ -26,7 +25,7 @@ def percentile_figure(data: dict):
             linewidth=3.0,
             label=metrics["model_name"],
             alpha=0.8,
-            color=PLOT_COLORS.get(metrics["model_name"], "gray"),
+            color=PLOT_COLORS.get(metrics["model_name"], None),
         )
 
     ax1.set_xlabel("Users with ≥x train images")

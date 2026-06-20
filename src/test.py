@@ -50,6 +50,49 @@ def get_testcase_rankingmetrics(test_case: pd.DataFrame):
         }
     )
 
+def compute_all_metrics(text, references, rouge_scorer_global):
+    # BLEU
+    bleu = compute_bleu_multi_ref(references, text)
+
+    # ROUGE
+    rouge = max(
+        rouge_scorer_global.score(ref, text)["rougeL"].fmeasure
+        for ref in references
+    ) if references else 0.0
+
+    # TOKENS
+    tokens = text.split()
+    summary_len = len(tokens)
+
+    ref_lens = [len(r.split()) for r in references]
+    ref_len_mean = sum(ref_lens) / len(ref_lens) if ref_lens else 0
+
+    # Relative length
+    length_ratio = summary_len / ref_len_mean if ref_len_mean > 0 else 0
+
+    # Diversity
+    distinct_1 = len(set(tokens)) / len(tokens) if tokens else 0
+
+    bigrams = list(zip(tokens, tokens[1:]))
+    distinct_2 = len(set(bigrams)) / len(bigrams) if bigrams else 0
+
+    # Coverage
+    input_words = set(" ".join(references).split())
+    summary_words = set(tokens)
+
+    coverage = len(summary_words & input_words) / len(summary_words) if summary_words else 0
+
+    return {
+        "bleu": bleu,
+        "rouge": rouge,
+        "length_ratio": length_ratio,
+        "distinct_1": distinct_1,
+        "distinct_2": distinct_2,
+        "coverage": coverage,
+    }
+
+def safe_references(candidate, refs):
+    return [r for r in refs if r != candidate]
 
 def test_tripadvisor_authorship_task(datamodule, model_preds, args):
     makedirs("docs/" + datamodule.city, exist_ok=True)
@@ -64,7 +107,7 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
     # =========================================================
     # LIMIT GLOBAL DEBUG (IMPORTANT)
     # =========================================================
-    debug_max_testcases = 2000
+    debug_max_testcases = 1000
 
     # =========================================================
     # CAMBIO 1 — MODEL ONLY ONCE PER MODEL (OUTSIDE LOOP)
@@ -79,13 +122,16 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     summarizer_model.to(device)
+    rng = np.random.RandomState(42)
 
     for model in model_preds:
         print("=" * 50)
         print(model)
         print("=" * 50)
 
-        test_set = datamodule.test_dataset.dataframe
+        base_test_set = datamodule.test_dataset.dataframe.copy()
+
+        test_set = base_test_set.copy()
         test_set["pred"] = model_preds[model]
 
         print("\n--- SUMMARY EVALUATION (LIMITED DEBUG) ---\n")
@@ -93,8 +139,9 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
         summaries_data = []
         top_n = 10
 
-        running_bleu = []
-        running_rouge = []
+        original_groups = dict(tuple(base_test_set.groupby("id_test")))
+
+        rouge_scorer_global = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
 
         for i, (id_test, group) in enumerate(test_set.groupby("id_test", sort=False)):
             if i >= debug_max_testcases:
@@ -106,10 +153,18 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
             if len(pos_row) == 0:
                 continue
 
-            references = group["review_full"].dropna().tolist()
-            references = list(dict.fromkeys(references))
+            references_all = group["review_full"].dropna().tolist()
+            references_all = list(dict.fromkeys(references_all))
             top_reviews = group.head(top_n)["review_full"].tolist()
 
+            # =========================
+            # MÉTODOS
+            # =========================
+
+            # BRIE (sin summarization)
+            brie_text = top_reviews[0]
+
+            # BRIE + summarization (tu pipeline actual)
             input_text = (
                     "You are summarizing restaurant reviews.\n"
                     "Write a concise overall opinion.\n\n"
@@ -124,68 +179,98 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
             ).to(device)
 
             with torch.no_grad():
-               output = summarizer_model.generate(
-                   **inputs,
-                   max_length=60,
-                   num_beams=2
-            )
+                output = summarizer_model.generate(
+                    **inputs,
+                    max_length=60,
+                    num_beams=2
+                )
 
-            summary = tokenizer.decode(output[0], skip_special_tokens=True)
+            brie_summary = tokenizer.decode(output[0], skip_special_tokens=True)
+
+            original_group = original_groups[id_test]
+
+            # CNT (baseline independiente del ranking)
+            cnt_text = original_group.sample(1, random_state=0)["review_full"].values[0]
+
+            # RANDOM (también independiente del ranking)
+            random_text = original_group.sample(1, random_state=rng.randint(0, 10**6))["review_full"].values[0]
+
             if i < 3:
                 print("\n--- DEBUG SAMPLE ---")
-                print("SUMMARY:", summary)
-                print("REF SAMPLE:", references[:2])
+                print("BRIE:", brie_text[:100])
+                print("BRIE+SUM:", brie_summary[:100])
+                print("RANDOM:", random_text[:100])
+                print("CNT:", cnt_text[:100])
+
             # =========================
             # MÉTRICAS
             # =========================
-            bleu = compute_bleu_multi_ref(references, summary)
+            metrics_brie = compute_all_metrics(
+                brie_text,
+                safe_references(brie_text, references_all),
+                rouge_scorer_global
+            )
 
-            tokens = summary.split()
-            summary_len = len(tokens)
-            reference_len = len(" ".join(references).split())
+            metrics_brie_sum = compute_all_metrics(
+                brie_summary,
+                safe_references(brie_summary, references_all),
+                rouge_scorer_global
+            )
 
-            ref_lens = [len(r.split()) for r in top_reviews]
-            ref_len_mean = sum(ref_lens) / len(ref_lens) if ref_lens else 0
+            metrics_random = compute_all_metrics(
+                random_text,
+                safe_references(random_text, references_all),
+                rouge_scorer_global
+            )
 
-            length_ratio = summary_len / ref_len_mean if ref_len_mean > 0 else 0
+            metrics_cnt = compute_all_metrics(
+                cnt_text,
+                safe_references(cnt_text, references_all),
+                rouge_scorer_global
+            )
 
-            distinct_1 = len(set(tokens)) / len(tokens) if tokens else 0
-            bigrams = list(zip(tokens, tokens[1:]))
-            distinct_2 = len(set(bigrams)) / len(bigrams) if bigrams else 0
-
-            input_words = set(" ".join(top_reviews).split())
-            summary_words = set(tokens)
-            coverage = len(summary_words & input_words) / len(summary_words) if summary_words else 0
-
-            scorer = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
-            rouge = max(
-                scorer.score(ref, summary)["rougeL"].fmeasure
-                for ref in references
-            ) if references else 0.0
-
-            running_bleu.append(bleu)
-            running_rouge.append(rouge)
+            # =========================
+            # GUARDAR
+            # =========================
 
             summaries_data.append({
                 "id_test": id_test,
-                "summary": summary,
-                "reference": " ||| ".join(references),
-                "summary_len": summary_len,
-                "len_reference": reference_len,
-                "ref_len_mean": ref_len_mean,
-                "length_ratio": length_ratio,
-                "bleu": bleu,
-                "distinct_1": distinct_1,
-                "distinct_2": distinct_2,
-                "coverage": coverage,
-                "rouge": rouge
-            })
 
-            if (i + 1) % 50 == 0:
-                print(
-                    f"[INTERIM] BLEU mean: {np.mean(running_bleu):.4f} | "
-                    f"ROUGE mean: {np.mean(running_rouge):.4f}"
-                )
+                # BLEU
+                "bleu_brie": metrics_brie["bleu"],
+                "bleu_brie_sum": metrics_brie_sum["bleu"],
+                "bleu_random": metrics_random["bleu"],
+                "bleu_cnt": metrics_cnt["bleu"],
+
+                # ROUGE
+                "rouge_brie": metrics_brie["rouge"],
+                "rouge_brie_sum": metrics_brie_sum["rouge"],
+                "rouge_random": metrics_random["rouge"],
+                "rouge_cnt": metrics_cnt["rouge"],
+
+                # DIVERSITY
+                "dist1_brie": metrics_brie["distinct_1"],
+                "dist1_brie_sum": metrics_brie_sum["distinct_1"],
+                "dist1_random": metrics_random["distinct_1"],
+                "dist1_cnt": metrics_cnt["distinct_1"],
+
+                "dist2_brie": metrics_brie["distinct_2"],
+                "dist2_brie_sum": metrics_brie_sum["distinct_2"],
+                "dist2_random": metrics_random["distinct_2"],
+                "dist2_cnt": metrics_cnt["distinct_2"],
+
+                # COVERAGE
+                "cov_brie": metrics_brie["coverage"],
+                "cov_brie_sum": metrics_brie_sum["coverage"],
+                "cov_random": metrics_random["coverage"],
+                "cov_cnt": metrics_cnt["coverage"],
+
+                # LENGTH
+                "len_brie": metrics_brie["length_ratio"],
+                "len_brie_sum": metrics_brie_sum["length_ratio"],
+                "len_random": metrics_random["length_ratio"],
+                "len_cnt": metrics_cnt["length_ratio"],
+            })
 
             print(f"[{i+1}/{debug_max_testcases}] Generated summaries: {len(summaries_data)}")
             # =========================================================
@@ -197,13 +282,17 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
         df_summaries = pd.DataFrame(summaries_data)
         df_summaries.set_index("id_test", inplace=True)
 
-        mean_bleu = df_summaries["bleu"].mean()
-        mean_rouge = df_summaries["rouge"].mean()
-
         print(f"\nGLOBAL METRICS ({model})")
-        print(f"Mean BLEU  : {mean_bleu:.4f}")
-        print(f"Mean ROUGE : {mean_rouge:.4f}")
-        print("")
+
+        print(f"BLEU BRIE      : {df_summaries['bleu_brie'].mean():.4f}")
+        print(f"BLEU BRIE+SUM  : {df_summaries['bleu_brie_sum'].mean():.4f}")
+        print(f"BLEU RANDOM    : {df_summaries['bleu_random'].mean():.4f}")
+        print(f"BLEU CNT       : {df_summaries['bleu_cnt'].mean():.4f}")
+
+        print(f"ROUGE BRIE     : {df_summaries['rouge_brie'].mean():.4f}")
+        print(f"ROUGE BRIE+SUM : {df_summaries['rouge_brie_sum'].mean():.4f}")
+        print(f"ROUGE RANDOM   : {df_summaries['rouge_random'].mean():.4f}")
+        print(f"ROUGE CNT      : {df_summaries['rouge_cnt'].mean():.4f}")
 
         df_summaries.to_csv(output_path)
         print(f"Summaries saved to: {output_path}")
@@ -250,30 +339,80 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
             rows.append({
                 "min_photos": i,
                 "num_cases": len(subset),
-                "mean_bleu": subset["bleu"].mean() if len(subset) > 0 else np.nan,
-                "mean_rouge": subset["rouge"].mean() if len(subset) > 0 else np.nan,
+
+                "bleu_brie": subset["bleu_brie"].mean() if len(subset) > 0 else np.nan,
+                "bleu_brie_sum": subset["bleu_brie_sum"].mean() if len(subset) > 0 else np.nan,
+                "bleu_random": subset["bleu_random"].mean() if len(subset) > 0 else np.nan,
+                "bleu_cnt": subset["bleu_cnt"].mean() if len(subset) > 0 else np.nan,
+
+                "rouge_brie": subset["rouge_brie"].mean() if len(subset) > 0 else np.nan,
+                "rouge_brie_sum": subset["rouge_brie_sum"].mean() if len(subset) > 0 else np.nan,
+                "rouge_random": subset["rouge_random"].mean() if len(subset) > 0 else np.nan,
+                "rouge_cnt": subset["rouge_cnt"].mean() if len(subset) > 0 else np.nan,
+
+                "dist1_brie": subset["dist1_brie"].mean() if len(subset) > 0 else np.nan,
+                "dist1_brie_sum": subset["dist1_brie_sum"].mean() if len(subset) > 0 else np.nan,
+
+                "dist2_brie": subset["dist2_brie"].mean() if len(subset) > 0 else np.nan,
+                "dist2_brie_sum": subset["dist2_brie_sum"].mean() if len(subset) > 0 else np.nan,
+
+                "cov_brie": subset["cov_brie"].mean() if len(subset) > 0 else np.nan,
+                "cov_brie_sum": subset["cov_brie_sum"].mean() if len(subset) > 0 else np.nan,
+
+                "len_brie": subset["len_brie"].mean() if len(subset) > 0 else np.nan,
+                "len_brie_sum": subset["len_brie_sum"].mean() if len(subset) > 0 else np.nan,
             })
 
-        df_bleu = pd.DataFrame(rows)
+        df_metrics_by_photos = pd.DataFrame(rows)
 
-        bleu_figure_data["metrics"].append({
-            "model_name": model,
-            "min_photos": df_bleu["min_photos"].tolist(),
-            "mean_bleu": df_bleu["mean_bleu"].tolist(),
-        })
+        bleu_figure_data["metrics"].extend([
+            {
+                "model_name": "BRIE",
+                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+                "mean_bleu": df_metrics_by_photos["bleu_brie"].tolist(),
+            },
+            {
+                "model_name": "BRIE+SUM",
+                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+                "mean_bleu": df_metrics_by_photos["bleu_brie_sum"].tolist(),
+            },
+            {
+                "model_name": "RANDOM",
+                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+                "mean_bleu": df_metrics_by_photos["bleu_random"].tolist(),
+            },
+            {
+                "model_name": "CNT",
+                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+                "mean_bleu": df_metrics_by_photos["bleu_cnt"].tolist(),
+            }
+        ])
 
-        rouge_figure_data["metrics"].append({
-            "model_name": model,
-            "min_photos": df_bleu["min_photos"].tolist(),
-            "mean_rouge": df_bleu["mean_rouge"].tolist(),
-        })
-
-        if model == "BRIE":
-            print("Generando gráfica BLEU para BRIE...")
-            figures.bleu_figure({"city": datamodule.city, "metrics": bleu_figure_data["metrics"]})
+        rouge_figure_data["metrics"].extend([
+            {
+                "model_name": "BRIE",
+                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+                "mean_rouge": df_metrics_by_photos["rouge_brie"].tolist(),
+            },
+            {
+                "model_name": "BRIE+SUM",
+                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+                "mean_rouge": df_metrics_by_photos["rouge_brie_sum"].tolist(),
+            },
+            {
+                "model_name": "RANDOM",
+                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+                "mean_rouge": df_metrics_by_photos["rouge_random"].tolist(),
+            },
+            {
+                "model_name": "CNT",
+                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+                "mean_rouge": df_metrics_by_photos["rouge_cnt"].tolist(),
+            }
+        ])
 
         output_bleu = f"docs/{datamodule.city}/bleu_by_photos_{model}.csv"
-        df_bleu.to_csv(output_bleu, index=False)
+        df_metrics_by_photos.to_csv(output_bleu, index=False)
 
         print(f"BLEU by photos saved to: {output_bleu}")
 
@@ -321,19 +460,19 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
         model_recall_metrics = {"k": [], "Recall@10": [], "model_name": model}
         model_ndcg_metrics = {"k": [], "NDCG@10": [], "model_name": model}
 
-        test_set = test_set[
+        filtered_test_set = test_set[
             test_set["id_test"].isin(test_cases["id_test"])
         ].reset_index(drop=True)
 
-        if test_set.empty:
+        if filtered_test_set.empty:
             print("No test cases after filtering → skipping Recall/NDCG/BLEU")
             continue
 
         print("")
 
-        preds = torch.tensor(test_set["pred"], dtype=torch.float)
-        target = torch.tensor(test_set["is_dev"], dtype=torch.long)
-        indexes = torch.tensor(test_set["id_test"], dtype=torch.long)
+        preds = torch.tensor(filtered_test_set["pred"], dtype=torch.float)
+        target = torch.tensor(filtered_test_set["is_dev"], dtype=torch.long)
+        indexes = torch.tensor(filtered_test_set["id_test"], dtype=torch.long)
         # % of test cases where the image was in position k=1,2,3...10 (Recall at k)
         print("k  Recall@10  NDCG@10")
         for k in range(1, 10 + 1):
@@ -366,6 +505,5 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
     # figures.retrieval_figure(recall_figure_data, "Recall@10")
     # figures.retrieval_figure(ndcg_figure_data, "NDCG@10")
     figures.percentile_figure(percentile_figure_data)
-    print("BLEU metrics length:", len(bleu_figure_data["metrics"]))
     figures.bleu_figure(bleu_figure_data)
     figures.rouge_figure(rouge_figure_data)
