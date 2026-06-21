@@ -165,9 +165,9 @@ def generic_metric_figure(data: dict, metric_key: str, ylabel: str, filename: st
 
     for metrics in data["metrics"]:
         x = np.array(metrics["min_photos"])
-        y = np.array(metrics[metric_key])
+        y = np.array(metrics[metric_key], dtype=np.float32)
 
-        mask = ~np.isnan(y)
+        mask = ~np.isnan(y.astype(np.float32))
 
         plt.plot(
             x[mask],

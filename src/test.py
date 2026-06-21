@@ -102,11 +102,15 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
     makedirs("figures/" + datamodule.city, exist_ok=True)
 
     # Data for the percentile figures
-    percentile_figure_data = {"city": datamodule.city, "metrics": []}
+    #percentile_figure_data = {"city": datamodule.city, "metrics": []}
     bleu_figure_data = {"city": datamodule.city, "metrics": []}
     rouge_figure_data = {"city": datamodule.city, "metrics": []}
-    recall_figure_data = {"city": datamodule.city, "metrics": []}
-    ndcg_figure_data = {"city": datamodule.city, "metrics": []}
+    dist1_figure_data = {"city": datamodule.city, "metrics": []}
+    dist2_figure_data = {"city": datamodule.city, "metrics": []}
+    cov_figure_data = {"city": datamodule.city, "metrics": []}
+    len_figure_data = {"city": datamodule.city, "metrics": []}
+    #recall_figure_data = {"city": datamodule.city, "metrics": []}
+    #ndcg_figure_data = {"city": datamodule.city, "metrics": []}
     # =========================================================
     # LIMIT GLOBAL DEBUG (IMPORTANT)
     # =========================================================
@@ -197,22 +201,27 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
             original_group = original_groups[id_test]
 
             # CNT (baseline independiente del ranking)
+            # CNT (centroid-based selection)
+
             texts = original_group["review_full"].tolist()
 
-            embeddings = embedder.encode(texts, convert_to_tensor=True)
+            if len(texts) == 0:
+                cnt_text = ""
+            else:
+                embeddings = embedder.encode(texts, convert_to_tensor=True)
 
-            centroid = embeddings.mean(dim=0)
+                centroid = embeddings.mean(dim=0)
 
-            similarities = f.cosine_similarity(
-                embeddings,
-                centroid.unsqueeze(0),
-                dim=1
-            )
+                similarities = f.cosine_similarity(
+                    embeddings,
+                    centroid.unsqueeze(0),
+                    dim=1
+                )
 
-            cnt_text = texts[int(torch.argmax(similarities))]
+                cnt_text = texts[int(torch.argmax(similarities))]
 
             # RANDOM (también independiente del ranking)
-            random_text = original_group.sample(n=1, random_state=i).iloc[0]["review_full"]
+            random_text = original_group.sample(n=1, random_state=int(id_test)).iloc[0]["review_full"]
 
             if i < 3:
                 print("\n--- DEBUG SAMPLE ---")
@@ -359,27 +368,40 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
                 "min_photos": i,
                 "num_cases": len(subset),
 
+                # BLEU
                 "bleu_brie": subset["bleu_brie"].mean() if len(subset) > 0 else np.nan,
                 "bleu_brie_sum": subset["bleu_brie_sum"].mean() if len(subset) > 0 else np.nan,
                 "bleu_random": subset["bleu_random"].mean() if len(subset) > 0 else np.nan,
                 "bleu_cnt": subset["bleu_cnt"].mean() if len(subset) > 0 else np.nan,
 
+                # ROUGE
                 "rouge_brie": subset["rouge_brie"].mean() if len(subset) > 0 else np.nan,
                 "rouge_brie_sum": subset["rouge_brie_sum"].mean() if len(subset) > 0 else np.nan,
                 "rouge_random": subset["rouge_random"].mean() if len(subset) > 0 else np.nan,
                 "rouge_cnt": subset["rouge_cnt"].mean() if len(subset) > 0 else np.nan,
 
+                # DIVERSITY
                 "dist1_brie": subset["dist1_brie"].mean() if len(subset) > 0 else np.nan,
                 "dist1_brie_sum": subset["dist1_brie_sum"].mean() if len(subset) > 0 else np.nan,
+                "dist1_random": subset["dist1_random"].mean() if len(subset) > 0 else np.nan,
+                "dist1_cnt": subset["dist1_cnt"].mean() if len(subset) > 0 else np.nan,
 
                 "dist2_brie": subset["dist2_brie"].mean() if len(subset) > 0 else np.nan,
                 "dist2_brie_sum": subset["dist2_brie_sum"].mean() if len(subset) > 0 else np.nan,
+                "dist2_random": subset["dist2_random"].mean() if len(subset) > 0 else np.nan,
+                "dist2_cnt": subset["dist2_cnt"].mean() if len(subset) > 0 else np.nan,
 
+                # COVERAGE
                 "cov_brie": subset["cov_brie"].mean() if len(subset) > 0 else np.nan,
                 "cov_brie_sum": subset["cov_brie_sum"].mean() if len(subset) > 0 else np.nan,
+                "cov_random": subset["cov_random"].mean() if len(subset) > 0 else np.nan,
+                "cov_cnt": subset["cov_cnt"].mean() if len(subset) > 0 else np.nan,
 
+                # LENGTH
                 "len_brie": subset["len_brie"].mean() if len(subset) > 0 else np.nan,
                 "len_brie_sum": subset["len_brie_sum"].mean() if len(subset) > 0 else np.nan,
+                "len_random": subset["len_random"].mean() if len(subset) > 0 else np.nan,
+                "len_cnt": subset["len_cnt"].mean() if len(subset) > 0 else np.nan,
             })
 
         df_metrics_by_photos = pd.DataFrame(rows)
@@ -430,10 +452,34 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
             }
         ])
 
-        output_bleu = f"docs/{datamodule.city}/bleu_by_photos_{model}.csv"
-        df_metrics_by_photos.to_csv(output_bleu, index=False)
+        dist1_figure_data["metrics"].append({
+            "model_name": "BRIE",
+            "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+            "mean_dist1": df_metrics_by_photos["dist1_brie"].tolist(),
+        })
 
-        print(f"BLEU by photos saved to: {output_bleu}")
+        dist2_figure_data["metrics"].append({
+            "model_name": "BRIE",
+            "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+            "mean_dist2": df_metrics_by_photos["dist2_brie"].tolist(),
+        })
+
+        cov_figure_data["metrics"].append({
+            "model_name": "BRIE",
+            "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+            "mean_cov": df_metrics_by_photos["cov_brie"].tolist(),
+        })
+
+        len_figure_data["metrics"].append({
+            "model_name": "BRIE",
+            "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+            "mean_len": df_metrics_by_photos["len_brie"].tolist(),
+        })
+
+        output_metrics_photos = f"docs/{datamodule.city}/metrics_by_photos_{model}.csv"
+        df_metrics_by_photos.to_csv(output_metrics_photos, index=False)
+
+        print(f"Metrics by photos saved to: {output_metrics_photos}")
 
         # =========================================================
         # PERCENTILE METRICS (ORIGINAL PIPELINE)
@@ -469,7 +515,7 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
             model_percentile_metrics["num_test_cases"].append(len(percentiles))
             model_percentile_metrics["median_percentile"].append(percentiles.median())
 
-        percentile_figure_data["metrics"].append(model_percentile_metrics)
+        #percentile_figure_data["metrics"].append(model_percentile_metrics)
 
        # For the recall metric, only include users with >= train images
 
@@ -509,8 +555,8 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
             model_ndcg_metrics["NDCG@10"].append(ndcg_k)
             print(f"{k:<3}{recall_k:<8.3f}{ndcg_k:.3f}")
 
-        recall_figure_data["metrics"].append(model_recall_metrics)
-        ndcg_figure_data["metrics"].append(model_ndcg_metrics)
+        #recall_figure_data["metrics"].append(model_recall_metrics)
+        #ndcg_figure_data["metrics"].append(model_ndcg_metrics)
 
         model_userwise_auroc = UserwiseAUCROC()(
             indexes=indexes, target=target, preds=preds
@@ -523,10 +569,10 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
 
     # figures.retrieval_figure(recall_figure_data, "Recall@10")
     # figures.retrieval_figure(ndcg_figure_data, "NDCG@10")
-    figures.percentile_figure(percentile_figure_data)
+    #figures.percentile_figure(percentile_figure_data)
     figures.bleu_figure(bleu_figure_data)
     figures.rouge_figure(rouge_figure_data)
-    #figures.generic_metric_figure(dist1_data, "mean_dist1", "Distinct-1", "dist1")
-    #figures. generic_metric_figure(dist2_data, "mean_dist2", "Distinct-2", "dist2")
-    #figures.generic_metric_figure(cov_data, "mean_cov", "Coverage", "coverage")
-    #figures.generic_metric_figure(len_data, "mean_len", "Length Ratio", "length")
+    figures.generic_metric_figure(dist1_figure_data, "mean_dist1", "Distinct-1", "dist1")
+    figures. generic_metric_figure(dist2_figure_data, "mean_dist2", "Distinct-2", "dist2")
+    figures.generic_metric_figure(cov_figure_data, "mean_cov", "Coverage", "coverage")
+    figures.generic_metric_figure(len_figure_data, "mean_len", "Length Ratio", "length")
