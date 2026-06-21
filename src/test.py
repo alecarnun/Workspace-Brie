@@ -107,7 +107,7 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
     # =========================================================
     # LIMIT GLOBAL DEBUG (IMPORTANT)
     # =========================================================
-    debug_max_testcases = 1000
+    debug_max_testcases = 10
 
     # =========================================================
     # CAMBIO 1 — MODEL ONLY ONCE PER MODEL (OUTSIDE LOOP)

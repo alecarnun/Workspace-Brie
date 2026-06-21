@@ -210,10 +210,10 @@ if __name__ == "__main__":
             models_preds[model_name] = test_preds
 
         # Obtain random predictions for baseline comparison
-        models_preds["RANDOM"] = torch.mean(
-            torch.rand((len(dm.test_dataset), 10)), dim=1
-        )
+        #models_preds["RANDOM"] = torch.mean(
+        #    torch.rand((len(dm.test_dataset), 10)), dim=1
+        #)
 
-        models_preds["CNT"] = get_centroid_preds(dm)
+        #models_preds["CNT"] = get_centroid_preds(dm)
 
         test_tripadvisor_authorship_task(dm, models_preds, args)
