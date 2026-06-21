@@ -10,6 +10,9 @@ from src.models.losses import UserwiseAUCROC
 import sacrebleu
 from rouge_score import rouge_scorer
 
+from sentence_transformers import SentenceTransformer
+import torch.nn.functional as f
+
 def compute_bleu_multi_ref(reference_list, candidate):
     if not reference_list or not isinstance(candidate, str):
         return 0.0
@@ -122,9 +125,13 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     summarizer_model.to(device)
-    rng = np.random.RandomState(42)
+
+    embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
     for model in model_preds:
+        if model != "BRIE":
+            continue
+
         print("=" * 50)
         print(model)
         print("=" * 50)
@@ -190,10 +197,22 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
             original_group = original_groups[id_test]
 
             # CNT (baseline independiente del ranking)
-            cnt_text = original_group.sample(1, random_state=0)["review_full"].values[0]
+            texts = original_group["review_full"].tolist()
+
+            embeddings = embedder.encode(texts, convert_to_tensor=True)
+
+            centroid = embeddings.mean(dim=0)
+
+            similarities = f.cosine_similarity(
+                embeddings,
+                centroid.unsqueeze(0),
+                dim=1
+            )
+
+            cnt_text = texts[int(torch.argmax(similarities))]
 
             # RANDOM (también independiente del ranking)
-            random_text = original_group.sample(1, random_state=rng.randint(0, 10**6))["review_full"].values[0]
+            random_text = original_group.sample(n=1, random_state=i).iloc[0]["review_full"]
 
             if i < 3:
                 print("\n--- DEBUG SAMPLE ---")
@@ -507,3 +526,7 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
     figures.percentile_figure(percentile_figure_data)
     figures.bleu_figure(bleu_figure_data)
     figures.rouge_figure(rouge_figure_data)
+    #figures.generic_metric_figure(dist1_data, "mean_dist1", "Distinct-1", "dist1")
+    #figures. generic_metric_figure(dist2_data, "mean_dist2", "Distinct-2", "dist2")
+    #figures.generic_metric_figure(cov_data, "mean_cov", "Coverage", "coverage")
+    #figures.generic_metric_figure(len_data, "mean_len", "Length Ratio", "length")

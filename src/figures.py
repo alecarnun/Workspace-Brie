@@ -159,3 +159,30 @@ def rouge_figure(data: dict):
 
     plt.savefig(f'figures/{data["city"]}/rouge_{data["city"]}.pdf')
     plt.close()
+
+def generic_metric_figure(data: dict, metric_key: str, ylabel: str, filename: str):
+    plt.figure(figsize=(9, 5))
+
+    for metrics in data["metrics"]:
+        x = np.array(metrics["min_photos"])
+        y = np.array(metrics[metric_key])
+
+        mask = ~np.isnan(y)
+
+        plt.plot(
+            x[mask],
+            y[mask],
+            label=metrics["model_name"],
+            linewidth=3
+        )
+
+    plt.xlabel("Users with ≥x train images")
+    plt.ylabel(ylabel)
+    plt.ylim(0, 1)
+    plt.grid(True, linestyle="--", alpha=0.5)
+    plt.legend()
+    plt.title(data["city"])
+    plt.tight_layout()
+
+    plt.savefig(f'figures/{data["city"]}/{filename}.pdf')
+    plt.close()
