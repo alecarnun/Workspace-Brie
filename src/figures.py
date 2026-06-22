@@ -178,7 +178,13 @@ def generic_metric_figure(data: dict, metric_key: str, ylabel: str, filename: st
 
     plt.xlabel("Users with ≥x train images")
     plt.ylabel(ylabel)
-    plt.ylim(0, 1)
+    ymax = max([
+        np.nanmax(metrics[metric_key])
+        for metrics in data["metrics"]
+        if len(metrics[metric_key]) > 0
+    ])
+
+    plt.ylim(0, ymax * 1.1)
     plt.grid(True, linestyle="--", alpha=0.5)
     plt.legend()
     plt.title(data["city"])
