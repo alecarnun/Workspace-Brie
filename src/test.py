@@ -452,29 +452,97 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
             }
         ])
 
-        dist1_figure_data["metrics"].append({
-            "model_name": "BRIE",
-            "min_photos": df_metrics_by_photos["min_photos"].tolist(),
-            "mean_dist1": df_metrics_by_photos["dist1_brie"].tolist(),
-        })
+        dist1_figure_data["metrics"].extend([
+            {
+                "model_name": "BRIE",
+                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+                "mean_dist1": df_metrics_by_photos["dist1_brie"].tolist(),
+            },
+            {
+                "model_name": "BRIE+SUM",
+                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+                "mean_dist1": df_metrics_by_photos["dist1_brie_sum"].tolist(),
+            },
+            {
+                "model_name": "RANDOM",
+                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+                "mean_dist1": df_metrics_by_photos["dist1_random"].tolist(),
+            },
+            {
+                "model_name": "CNT",
+                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+                "mean_dist1": df_metrics_by_photos["dist1_cnt"].tolist(),
+            }
+        ])
 
-        dist2_figure_data["metrics"].append({
-            "model_name": "BRIE",
-            "min_photos": df_metrics_by_photos["min_photos"].tolist(),
-            "mean_dist2": df_metrics_by_photos["dist2_brie"].tolist(),
-        })
+        dist2_figure_data["metrics"].extend([
+            {
+                "model_name": "BRIE",
+                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+                "mean_dist2": df_metrics_by_photos["dist2_brie"].tolist(),
+            },
+            {
+                "model_name": "BRIE+SUM",
+                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+                "mean_dist2": df_metrics_by_photos["dist2_brie_sum"].tolist(),
+            },
+            {
+                "model_name": "RANDOM",
+                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+                "mean_dist2": df_metrics_by_photos["dist2_random"].tolist(),
+            },
+            {
+                "model_name": "CNT",
+                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+                "mean_dist2": df_metrics_by_photos["dist2_cnt"].tolist(),
+            }
+        ])
 
-        cov_figure_data["metrics"].append({
-            "model_name": "BRIE",
-            "min_photos": df_metrics_by_photos["min_photos"].tolist(),
-            "mean_cov": df_metrics_by_photos["cov_brie"].tolist(),
-        })
+        cov_figure_data["metrics"].extend([
+            {
+                "model_name": "BRIE",
+                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+                "mean_cov": df_metrics_by_photos["cov_brie"].tolist(),
+            },
+            {
+                "model_name": "BRIE+SUM",
+                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+                "mean_cov": df_metrics_by_photos["cov_brie_sum"].tolist(),
+            },
+            {
+                "model_name": "RANDOM",
+                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+                "mean_cov": df_metrics_by_photos["cov_random"].tolist(),
+            },
+            {
+                "model_name": "CNT",
+                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+                "mean_cov": df_metrics_by_photos["cov_cnt"].tolist(),
+            }
+        ])
 
-        len_figure_data["metrics"].append({
-            "model_name": "BRIE",
-            "min_photos": df_metrics_by_photos["min_photos"].tolist(),
-            "mean_len": df_metrics_by_photos["len_brie"].tolist(),
-        })
+        len_figure_data["metrics"].extend([
+            {
+                "model_name": "BRIE",
+                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+                "mean_len": df_metrics_by_photos["len_brie"].tolist(),
+            },
+            {
+                "model_name": "BRIE+SUM",
+                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+                "mean_len": df_metrics_by_photos["len_brie_sum"].tolist(),
+            },
+            {
+                "model_name": "RANDOM",
+                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+                "mean_len": df_metrics_by_photos["len_random"].tolist(),
+            },
+            {
+                "model_name": "CNT",
+                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
+                "mean_len": df_metrics_by_photos["len_cnt"].tolist(),
+            }
+        ])
 
         output_metrics_photos = f"docs/{datamodule.city}/metrics_by_photos_{model}.csv"
         df_metrics_by_photos.to_csv(output_metrics_photos, index=False)
