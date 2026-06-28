@@ -114,7 +114,7 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
     # =========================================================
     # LIMIT GLOBAL DEBUG (IMPORTANT)
     # =========================================================
-    debug_max_testcases = 10
+    debug_max_testcases = 100  # TEMPORAL: Solo para análisis del dataset
 
     # =========================================================
     # CAMBIO 1 — MODEL ONLY ONCE PER MODEL (OUTSIDE LOOP)
@@ -147,6 +147,27 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
 
         print("\n--- SUMMARY EVALUATION (LIMITED DEBUG) ---\n")
 
+        # ANÁLISIS DEL DATASET
+        print("=== ANÁLISIS DEL DATASET ===")
+        test_sizes = []
+        is_dev_counts = []
+
+        for id_test, group in base_test_set.groupby("id_test"):
+            test_sizes.append(len(group))
+            is_dev_counts.append(group["is_dev"].sum())
+
+        print(f"Promedio de reviews por id_test: {np.mean(test_sizes):.2f}")
+        print(f"Mediana de reviews por id_test: {np.median(test_sizes):.2f}")
+        print(f"Promedio de is_dev=1 por id_test: {np.mean(is_dev_counts):.2f}")
+        print(f"Max reviews en un id_test: {max(test_sizes)}")
+        print(f"Min reviews en un id_test: {min(test_sizes)}")
+
+        # Verificar que cada id_test tiene exactamente 1 is_dev=1
+        casos_incorrectos = sum(1 for c in is_dev_counts if c != 1)
+        print(f"Casos con is_dev != 1: {casos_incorrectos}")
+        print("=" * 50)
+        print()
+
         summaries_data = []
         top_n = 10
 
@@ -164,18 +185,29 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
             if len(pos_row) == 0:
                 continue
 
-            references_all = group["review_full"].dropna().tolist()
-            references_all = list(dict.fromkeys(references_all))
+            # Obtener grupo original (sin ranking de BRIE) para las referencias
+            original_group = original_groups[id_test]
+
+            # Referencias para BRIE/CNT/RANDOM: SOLO la review con is_dev=1
+            ground_truth = original_group[original_group["is_dev"] == 1]["review_full"].dropna().tolist()
+
+            if len(ground_truth) == 0:
+                continue
+
+            # Referencias para BRIE+SUM: TODAS las reviews (porque resume múltiples)
+            all_reviews_for_sum = original_group["review_full"].dropna().tolist()
+            all_reviews_for_sum = list(dict.fromkeys(all_reviews_for_sum))
+
             top_reviews = group.head(top_n)["review_full"].tolist()
 
             # =========================
             # MÉTODOS
             # =========================
 
-            # BRIE (sin summarization)
-            brie_text = top_reviews[0]
+            # BRIE (sin summarization): Usar solo el top-1 rankeado por BRIE
+            brie_text = group.iloc[0]["review_full"]
 
-            # BRIE + summarization (tu pipeline actual)
+            # BRIE + summarization
             input_text = (
                     "You are summarizing restaurant reviews.\n"
                     "Write a concise overall opinion.\n\n"
@@ -198,11 +230,8 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
 
             brie_summary = tokenizer.decode(output[0], skip_special_tokens=True)
 
-            original_group = original_groups[id_test]
-
             # CNT (baseline independiente del ranking)
             # CNT (centroid-based selection)
-
             texts = original_group["review_full"].tolist()
 
             if len(texts) == 0:
@@ -225,35 +254,49 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
 
             if i < 3:
                 print("\n--- DEBUG SAMPLE ---")
-                print("BRIE:", brie_text[:100])
-                print("BRIE+SUM:", brie_summary[:100])
-                print("RANDOM:", random_text[:100])
-                print("CNT:", cnt_text[:100])
+                print(f"id_test: {id_test}")
+                print(f"Original group size: {len(original_group)}")
+                print(f"Ground truth (is_dev=1): {ground_truth[0][:80]}...")
+                print(f"BRIE ranked is_dev=1 at top? {group.iloc[0]['is_dev'] == 1}")
+
+                # Mostrar ranking completo
+                print("\nRANKING de BRIE (top-5):")
+                for idx, row in group.head(5).iterrows():
+                    marker = " ← TOP-1 (BRIE selects this)" if idx == group.index[0] else ""
+                    dev_marker = " [is_dev=1 - GROUND TRUTH]" if row['is_dev'] == 1 else " [is_dev=0]"
+                    print(f"  pred={row['pred']:.4f}{dev_marker}: {row['review_full'][:80]}...{marker}")
+
+                print(f"\nBRIE (top-1): {brie_text[:100]}")
+                print(f"BRIE+SUM: {brie_summary[:100]}")
+                print(f"RANDOM: {random_text[:100]}")
+                print(f"CNT: {cnt_text[:100]}")
 
             # =========================
             # MÉTRICAS
             # =========================
+            # BRIE, CNT, RANDOM: Comparar contra ground truth (is_dev=1)
             metrics_brie = compute_all_metrics(
                 brie_text,
-                safe_references(brie_text, references_all),
+                ground_truth,
                 rouge_scorer_global
             )
 
+            # BRIE+SUM: Comparar contra TODAS las reviews (usa safe_references)
             metrics_brie_sum = compute_all_metrics(
                 brie_summary,
-                safe_references(brie_summary, references_all),
+                safe_references(brie_summary, all_reviews_for_sum),
                 rouge_scorer_global
             )
 
             metrics_random = compute_all_metrics(
                 random_text,
-                safe_references(random_text, references_all),
+                ground_truth,
                 rouge_scorer_global
             )
 
             metrics_cnt = compute_all_metrics(
                 cnt_text,
-                safe_references(cnt_text, references_all),
+                ground_truth,
                 rouge_scorer_global
             )
 
@@ -317,10 +360,35 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
         print(f"BLEU RANDOM    : {df_summaries['bleu_random'].mean():.4f}")
         print(f"BLEU CNT       : {df_summaries['bleu_cnt'].mean():.4f}")
 
-        print(f"ROUGE BRIE     : {df_summaries['rouge_brie'].mean():.4f}")
+        print(f"\nROUGE BRIE     : {df_summaries['rouge_brie'].mean():.4f}")
         print(f"ROUGE BRIE+SUM : {df_summaries['rouge_brie_sum'].mean():.4f}")
         print(f"ROUGE RANDOM   : {df_summaries['rouge_random'].mean():.4f}")
         print(f"ROUGE CNT      : {df_summaries['rouge_cnt'].mean():.4f}")
+
+        # ANÁLISIS ADICIONAL: ¿BRIE es mejor cuando acierta?
+        print("\n--- ANÁLISIS POR RANKING ---")
+
+        # Añadir columna para saber si BRIE acertó
+        test_set_with_rank = test_set.copy()
+        test_set_with_rank = test_set_with_rank.sort_values(['id_test', 'pred'], ascending=[True, False])
+        test_set_with_rank['rank'] = test_set_with_rank.groupby('id_test').cumcount() + 1
+
+        # Casos donde BRIE pone is_dev=1 en top-1
+        top1_correct = test_set_with_rank[(test_set_with_rank['rank'] == 1) & (test_set_with_rank['is_dev'] == 1)]['id_test'].unique()
+
+        if len(top1_correct) > 0:
+            df_correct = df_summaries[df_summaries.index.isin(top1_correct)]
+            df_incorrect = df_summaries[~df_summaries.index.isin(top1_correct)]
+
+            print(f"\nCasos donde BRIE acierta top-1 (n={len(df_correct)}):")
+            print(f"  BLEU BRIE: {df_correct['bleu_brie'].mean():.4f}")
+            print(f"  BLEU CNT:  {df_correct['bleu_cnt'].mean():.4f}")
+            print(f"  BLEU RAND: {df_correct['bleu_random'].mean():.4f}")
+
+            print(f"\nCasos donde BRIE falla top-1 (n={len(df_incorrect)}):")
+            print(f"  BLEU BRIE: {df_incorrect['bleu_brie'].mean():.4f}")
+            print(f"  BLEU CNT:  {df_incorrect['bleu_cnt'].mean():.4f}")
+            print(f"  BLEU RAND: {df_incorrect['bleu_random'].mean():.4f}")
 
         df_summaries.to_csv(output_path)
         print(f"Summaries saved to: {output_path}")
