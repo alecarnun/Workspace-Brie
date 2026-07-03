@@ -111,14 +111,9 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
     len_figure_data = {"city": datamodule.city, "metrics": []}
     #recall_figure_data = {"city": datamodule.city, "metrics": []}
     #ndcg_figure_data = {"city": datamodule.city, "metrics": []}
-    # =========================================================
-    # LIMIT GLOBAL DEBUG (IMPORTANT)
-    # =========================================================
+
     debug_max_testcases = 2000
 
-    # =========================================================
-    # CAMBIO 1 — MODEL ONLY ONCE PER MODEL (OUTSIDE LOOP)
-    # =========================================================
     summarizer_model_name = "facebook/BART-large-CNN"
 
     tokenizer = AutoTokenizer.from_pretrained(summarizer_model_name)
