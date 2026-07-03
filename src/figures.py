@@ -91,10 +91,15 @@ def retrieval_figure(data: dict, metric_name: str):
     plt.show()
 
 def bleu_figure(data: dict):
-    plt.figure(figsize=(9, 5))
+    fig, ax1 = plt.subplots(figsize=(9, 5))
+
+    plt.rcParams.update({'font.size': 14})
+
+    ax2 = ax1.twinx()
 
     xmax = 0
 
+    # LEFT AXIS (BLEU curves)
     for metrics in data["metrics"]:
         x = np.array(metrics["min_photos"])
         y = np.array(metrics["mean_bleu"])
@@ -107,88 +112,174 @@ def bleu_figure(data: dict):
         if len(x_valid) == 0:
             continue
 
-        plt.plot(
+        ax1.plot(
             x_valid,
             y_valid,
             label=metrics["model_name"],
-            linewidth=3
+            linewidth=3,
+            color=PLOT_COLORS.get(metrics["model_name"], None),
+            alpha=0.8
         )
 
         xmax = max(xmax, x_valid.max())
 
-    plt.xlabel("Users with ≥x train images")
-    plt.ylabel("Mean BLEU")
+    ax1.set_xlabel("Users with ≥x train images", fontsize=14)
+    ax1.set_ylabel("Mean BLEU", fontsize=14)
+    ax1.tick_params(axis='both', which='major', labelsize=12)
 
     if xmax > 0:
-        plt.xlim(0, xmax + 2)
+        ax1.set_xlim(0, xmax + 2)
     else:
-        plt.xlim(0, 100)
+        ax1.set_xlim(0, 100)
 
-    plt.ylim(0, 1)
-    plt.grid(True, linestyle="--", alpha=0.5)
-    plt.legend()
-    plt.title(data["city"])
+    ax1.set_ylim(0, 1)
+    ax1.grid(True, linestyle="--", alpha=0.5)
+    ax1.legend(loc="upper left", fontsize=12)
+
+    # RIGHT AXIS (Test cases)
+    for metrics in data["metrics"]:
+        x = np.array(metrics["min_photos"])
+        num_cases = np.array(metrics["num_cases"])
+
+        mask = ~np.isnan(np.array(metrics["mean_bleu"]))
+
+        ax2.plot(
+            x[mask],
+            num_cases[mask],
+            linewidth=2.5,
+            color="gray",
+            alpha=0.4,
+            linestyle='--'
+        )
+
+    ax2.set_ylabel("Test cases", fontsize=14, color='gray')
+    ax2.tick_params(axis='y', labelcolor='gray', labelsize=12)
+    ax2.set_yscale("log")
+
+    ax1.set_title(data["city"], fontsize=16)
     plt.tight_layout()
 
-    plt.savefig(f'figures/{data["city"]}/bleu_{data["city"]}.pdf')
+    plt.savefig(f'figures/{data["city"]}/bleu_{data["city"]}.pdf', bbox_inches='tight')
     plt.close()
 
 def rouge_figure(data: dict):
-    plt.figure(figsize=(9, 5))
+    fig, ax1 = plt.subplots(figsize=(9, 5))
 
+    # Aumentar tamaño de fuente
+    plt.rcParams.update({'font.size': 14})
+
+    ax2 = ax1.twinx()
+
+    # LEFT AXIS (ROUGE curves)
     for metrics in data["metrics"]:
         x = np.array(metrics["min_photos"])
         y = np.array(metrics["mean_rouge"])
 
         mask = ~np.isnan(y)
 
-        plt.plot(
+        ax1.plot(
             x[mask],
             y[mask],
             label=metrics["model_name"],
-            linewidth=3
+            linewidth=3,
+            color=PLOT_COLORS.get(metrics["model_name"], None),
+            alpha=0.8
         )
 
-    plt.xlabel("Users with ≥x train images")
-    plt.ylabel("Mean ROUGE")
-    plt.ylim(0, 1)
-    plt.grid(True, linestyle="--", alpha=0.5)
-    plt.legend()
-    plt.title(data["city"])
+    ax1.set_xlabel("Users with ≥x train images", fontsize=14)
+    ax1.set_ylabel("Mean ROUGE", fontsize=14)
+    ax1.set_ylim(0, 1)
+    ax1.tick_params(axis='both', which='major', labelsize=12)
+    ax1.grid(True, linestyle="--", alpha=0.5)
+    ax1.legend(loc="upper left", fontsize=12)
+
+    # RIGHT AXIS (Test cases)
+    for metrics in data["metrics"]:
+        x = np.array(metrics["min_photos"])
+        num_cases = np.array(metrics["num_cases"])
+
+        mask = ~np.isnan(np.array(metrics["mean_rouge"]))
+
+        ax2.plot(
+            x[mask],
+            num_cases[mask],
+            linewidth=2.5,
+            color="gray",
+            alpha=0.4,
+            linestyle='--'
+        )
+
+    ax2.set_ylabel("Test cases", fontsize=14, color='gray')
+    ax2.tick_params(axis='y', labelcolor='gray', labelsize=12)
+    ax2.set_yscale("log")
+
+    ax1.set_title(data["city"], fontsize=16)
     plt.tight_layout()
 
-    plt.savefig(f'figures/{data["city"]}/rouge_{data["city"]}.pdf')
+    plt.savefig(f'figures/{data["city"]}/rouge_{data["city"]}.pdf', bbox_inches='tight')
     plt.close()
 
 def generic_metric_figure(data: dict, metric_key: str, ylabel: str, filename: str):
-    plt.figure(figsize=(9, 5))
+    fig, ax1 = plt.subplots(figsize=(9, 5))
 
+    # Aumentar tamaño de fuente
+    plt.rcParams.update({'font.size': 14})
+
+    ax2 = ax1.twinx()
+
+    # LEFT AXIS (Metric curves)
     for metrics in data["metrics"]:
         x = np.array(metrics["min_photos"])
         y = np.array(metrics[metric_key], dtype=np.float32)
 
         mask = ~np.isnan(y.astype(np.float32))
 
-        plt.plot(
+        ax1.plot(
             x[mask],
             y[mask],
             label=metrics["model_name"],
-            linewidth=3
+            linewidth=3,
+            color=PLOT_COLORS.get(metrics["model_name"], None),
+            alpha=0.8
         )
 
-    plt.xlabel("Users with ≥x train images")
-    plt.ylabel(ylabel)
+    ax1.set_xlabel("Users with ≥x train images", fontsize=14)
+    ax1.set_ylabel(ylabel, fontsize=14)
+
     ymax = max([
         np.nanmax(metrics[metric_key])
         for metrics in data["metrics"]
         if len(metrics[metric_key]) > 0
     ])
 
-    plt.ylim(0, ymax * 1.1)
-    plt.grid(True, linestyle="--", alpha=0.5)
-    plt.legend()
-    plt.title(data["city"])
+    ax1.set_ylim(0, ymax * 1.1)
+    ax1.tick_params(axis='both', which='major', labelsize=12)
+    ax1.grid(True, linestyle="--", alpha=0.5)
+    ax1.legend(loc="upper left", fontsize=12)
+
+    # RIGHT AXIS (Test cases)
+    for metrics in data["metrics"]:
+        x = np.array(metrics["min_photos"])
+        num_cases = np.array(metrics["num_cases"])
+
+        y_metric = np.array(metrics[metric_key], dtype=np.float32)
+        mask = ~np.isnan(y_metric.astype(np.float32))
+
+        ax2.plot(
+            x[mask],
+            num_cases[mask],
+            linewidth=2.5,
+            color="gray",
+            alpha=0.4,
+            linestyle='--'
+        )
+
+    ax2.set_ylabel("Test cases", fontsize=14, color='gray')
+    ax2.tick_params(axis='y', labelcolor='gray', labelsize=12)
+    ax2.set_yscale("log")
+
+    ax1.set_title(data["city"], fontsize=16)
     plt.tight_layout()
 
-    plt.savefig(f'figures/{data["city"]}/{filename}.pdf')
+    plt.savefig(f'figures/{data["city"]}/{filename}.pdf', bbox_inches='tight')
     plt.close()

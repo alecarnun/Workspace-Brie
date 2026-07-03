@@ -105,7 +105,6 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
     #percentile_figure_data = {"city": datamodule.city, "metrics": []}
     bleu_figure_data = {"city": datamodule.city, "metrics": []}
     rouge_figure_data = {"city": datamodule.city, "metrics": []}
-    dist1_figure_data = {"city": datamodule.city, "metrics": []}
     dist2_figure_data = {"city": datamodule.city, "metrics": []}
     cov_figure_data = {"city": datamodule.city, "metrics": []}
     len_figure_data = {"city": datamodule.city, "metrics": []}
@@ -474,21 +473,25 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
                 "model_name": "BRIE",
                 "min_photos": df_metrics_by_photos["min_photos"].tolist(),
                 "mean_bleu": df_metrics_by_photos["bleu_brie"].tolist(),
+                "num_cases": df_metrics_by_photos["num_cases"].tolist(),
             },
             {
                 "model_name": "BRIE+SUM",
                 "min_photos": df_metrics_by_photos["min_photos"].tolist(),
                 "mean_bleu": df_metrics_by_photos["bleu_brie_sum"].tolist(),
+                "num_cases": df_metrics_by_photos["num_cases"].tolist(),
             },
             {
                 "model_name": "RANDOM",
                 "min_photos": df_metrics_by_photos["min_photos"].tolist(),
                 "mean_bleu": df_metrics_by_photos["bleu_random"].tolist(),
+                "num_cases": df_metrics_by_photos["num_cases"].tolist(),
             },
             {
                 "model_name": "CNT",
                 "min_photos": df_metrics_by_photos["min_photos"].tolist(),
                 "mean_bleu": df_metrics_by_photos["bleu_cnt"].tolist(),
+                "num_cases": df_metrics_by_photos["num_cases"].tolist(),
             }
         ])
 
@@ -497,44 +500,25 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
                 "model_name": "BRIE",
                 "min_photos": df_metrics_by_photos["min_photos"].tolist(),
                 "mean_rouge": df_metrics_by_photos["rouge_brie"].tolist(),
+                "num_cases": df_metrics_by_photos["num_cases"].tolist(),
             },
             {
                 "model_name": "BRIE+SUM",
                 "min_photos": df_metrics_by_photos["min_photos"].tolist(),
                 "mean_rouge": df_metrics_by_photos["rouge_brie_sum"].tolist(),
+                "num_cases": df_metrics_by_photos["num_cases"].tolist(),
             },
             {
                 "model_name": "RANDOM",
                 "min_photos": df_metrics_by_photos["min_photos"].tolist(),
                 "mean_rouge": df_metrics_by_photos["rouge_random"].tolist(),
+                "num_cases": df_metrics_by_photos["num_cases"].tolist(),
             },
             {
                 "model_name": "CNT",
                 "min_photos": df_metrics_by_photos["min_photos"].tolist(),
                 "mean_rouge": df_metrics_by_photos["rouge_cnt"].tolist(),
-            }
-        ])
-
-        dist1_figure_data["metrics"].extend([
-            {
-                "model_name": "BRIE",
-                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
-                "mean_dist1": df_metrics_by_photos["dist1_brie"].tolist(),
-            },
-            {
-                "model_name": "BRIE+SUM",
-                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
-                "mean_dist1": df_metrics_by_photos["dist1_brie_sum"].tolist(),
-            },
-            {
-                "model_name": "RANDOM",
-                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
-                "mean_dist1": df_metrics_by_photos["dist1_random"].tolist(),
-            },
-            {
-                "model_name": "CNT",
-                "min_photos": df_metrics_by_photos["min_photos"].tolist(),
-                "mean_dist1": df_metrics_by_photos["dist1_cnt"].tolist(),
+                "num_cases": df_metrics_by_photos["num_cases"].tolist(),
             }
         ])
 
@@ -543,21 +527,25 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
                 "model_name": "BRIE",
                 "min_photos": df_metrics_by_photos["min_photos"].tolist(),
                 "mean_dist2": df_metrics_by_photos["dist2_brie"].tolist(),
+                "num_cases": df_metrics_by_photos["num_cases"].tolist(),
             },
             {
                 "model_name": "BRIE+SUM",
                 "min_photos": df_metrics_by_photos["min_photos"].tolist(),
                 "mean_dist2": df_metrics_by_photos["dist2_brie_sum"].tolist(),
+                "num_cases": df_metrics_by_photos["num_cases"].tolist(),
             },
             {
                 "model_name": "RANDOM",
                 "min_photos": df_metrics_by_photos["min_photos"].tolist(),
                 "mean_dist2": df_metrics_by_photos["dist2_random"].tolist(),
+                "num_cases": df_metrics_by_photos["num_cases"].tolist(),
             },
             {
                 "model_name": "CNT",
                 "min_photos": df_metrics_by_photos["min_photos"].tolist(),
                 "mean_dist2": df_metrics_by_photos["dist2_cnt"].tolist(),
+                "num_cases": df_metrics_by_photos["num_cases"].tolist(),
             }
         ])
 
@@ -566,21 +554,25 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
                 "model_name": "BRIE",
                 "min_photos": df_metrics_by_photos["min_photos"].tolist(),
                 "mean_cov": df_metrics_by_photos["cov_brie"].tolist(),
+                "num_cases": df_metrics_by_photos["num_cases"].tolist(),
             },
             {
                 "model_name": "BRIE+SUM",
                 "min_photos": df_metrics_by_photos["min_photos"].tolist(),
                 "mean_cov": df_metrics_by_photos["cov_brie_sum"].tolist(),
+                "num_cases": df_metrics_by_photos["num_cases"].tolist(),
             },
             {
                 "model_name": "RANDOM",
                 "min_photos": df_metrics_by_photos["min_photos"].tolist(),
                 "mean_cov": df_metrics_by_photos["cov_random"].tolist(),
+                "num_cases": df_metrics_by_photos["num_cases"].tolist(),
             },
             {
                 "model_name": "CNT",
                 "min_photos": df_metrics_by_photos["min_photos"].tolist(),
                 "mean_cov": df_metrics_by_photos["cov_cnt"].tolist(),
+                "num_cases": df_metrics_by_photos["num_cases"].tolist(),
             }
         ])
 
@@ -589,21 +581,25 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
                 "model_name": "BRIE",
                 "min_photos": df_metrics_by_photos["min_photos"].tolist(),
                 "mean_len": df_metrics_by_photos["len_brie"].tolist(),
+                "num_cases": df_metrics_by_photos["num_cases"].tolist(),
             },
             {
                 "model_name": "BRIE+SUM",
                 "min_photos": df_metrics_by_photos["min_photos"].tolist(),
                 "mean_len": df_metrics_by_photos["len_brie_sum"].tolist(),
+                "num_cases": df_metrics_by_photos["num_cases"].tolist(),
             },
             {
                 "model_name": "RANDOM",
                 "min_photos": df_metrics_by_photos["min_photos"].tolist(),
                 "mean_len": df_metrics_by_photos["len_random"].tolist(),
+                "num_cases": df_metrics_by_photos["num_cases"].tolist(),
             },
             {
                 "model_name": "CNT",
                 "min_photos": df_metrics_by_photos["min_photos"].tolist(),
                 "mean_len": df_metrics_by_photos["len_cnt"].tolist(),
+                "num_cases": df_metrics_by_photos["num_cases"].tolist(),
             }
         ])
 
@@ -703,7 +699,6 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
     #figures.percentile_figure(percentile_figure_data)
     figures.bleu_figure(bleu_figure_data)
     figures.rouge_figure(rouge_figure_data)
-    figures.generic_metric_figure(dist1_figure_data, "mean_dist1", "Distinct-1", "dist1")
-    figures. generic_metric_figure(dist2_figure_data, "mean_dist2", "Distinct-2", "dist2")
+    figures.generic_metric_figure(dist2_figure_data, "mean_dist2", "Distinct-2", "dist2")
     figures.generic_metric_figure(cov_figure_data, "mean_cov", "Coverage", "coverage")
     figures.generic_metric_figure(len_figure_data, "mean_len", "Length Ratio", "length")
