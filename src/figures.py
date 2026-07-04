@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 from matplotlib import rcParams
 import numpy as np
 
@@ -134,7 +135,23 @@ def bleu_figure(data: dict):
 
     ax1.set_ylim(0, 1)
     ax1.grid(True, linestyle="--", alpha=0.5)
-    ax1.legend(loc="upper left", fontsize=12)
+    legend1 = ax1.legend(loc="upper left", fontsize=12)
+    ax1.add_artist(legend1)
+
+    testcase_line = Line2D(
+        [0], [0],
+        color="gray",
+        linewidth=3,
+        alpha=0.7,
+        linestyle="-",
+        label="Test cases"
+    )
+
+    ax1.legend(
+        handles=[testcase_line],
+        loc="upper right",
+        fontsize=12
+    )
 
     # RIGHT AXIS (Test cases)
     for metrics in data["metrics"]:
@@ -148,8 +165,7 @@ def bleu_figure(data: dict):
             num_cases[mask],
             linewidth=2.5,
             color="gray",
-            alpha=0.4,
-            linestyle='--'
+            alpha=0.4
         )
 
     ax2.set_ylabel("Test cases", fontsize=14, color='gray')
@@ -191,7 +207,23 @@ def rouge_figure(data: dict):
     ax1.set_ylim(0, 1)
     ax1.tick_params(axis='both', which='major', labelsize=12)
     ax1.grid(True, linestyle="--", alpha=0.5)
-    ax1.legend(loc="upper left", fontsize=12)
+    legend1 = ax1.legend(loc="upper left", fontsize=12)
+    ax1.add_artist(legend1)
+
+    testcase_line = Line2D(
+        [0], [0],
+        color="gray",
+        linewidth=3,
+        alpha=0.7,
+        linestyle="-",
+        label="Test cases"
+    )
+
+    ax1.legend(
+        handles=[testcase_line],
+        loc="upper right",
+        fontsize=12
+    )
 
     # RIGHT AXIS (Test cases)
     for metrics in data["metrics"]:
@@ -205,8 +237,7 @@ def rouge_figure(data: dict):
             num_cases[mask],
             linewidth=2.5,
             color="gray",
-            alpha=0.4,
-            linestyle='--'
+            alpha=0.4
         )
 
     ax2.set_ylabel("Test cases", fontsize=14, color='gray')
@@ -252,10 +283,29 @@ def generic_metric_figure(data: dict, metric_key: str, ylabel: str, filename: st
         if len(metrics[metric_key]) > 0
     ])
 
-    ax1.set_ylim(0, ymax * 1.1)
+    if metric_key == "mean_dist2":
+        ax1.set_ylim(0.97, 1)
+    else:
+        ax1.set_ylim(0, ymax * 1.1)
     ax1.tick_params(axis='both', which='major', labelsize=12)
     ax1.grid(True, linestyle="--", alpha=0.5)
-    ax1.legend(loc="upper left", fontsize=12)
+    legend1 = ax1.legend(loc="upper left", fontsize=12)
+    ax1.add_artist(legend1)
+
+    testcase_line = Line2D(
+        [0], [0],
+        color="gray",
+        linewidth=3,
+        alpha=0.7,
+        linestyle="-",
+        label="Test cases"
+    )
+
+    ax1.legend(
+        handles=[testcase_line],
+        loc="upper right",
+        fontsize=12
+    )
 
     # RIGHT AXIS (Test cases)
     for metrics in data["metrics"]:
@@ -270,8 +320,7 @@ def generic_metric_figure(data: dict, metric_key: str, ylabel: str, filename: st
             num_cases[mask],
             linewidth=2.5,
             color="gray",
-            alpha=0.4,
-            linestyle='--'
+            alpha=0.4
         )
 
     ax2.set_ylabel("Test cases", fontsize=14, color='gray')

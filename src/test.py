@@ -314,11 +314,6 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
                 "rouge_cnt": metrics_cnt["rouge"],
 
                 # DIVERSITY
-                "dist1_brie": metrics_brie["distinct_1"],
-                "dist1_brie_sum": metrics_brie_sum["distinct_1"],
-                "dist1_random": metrics_random["distinct_1"],
-                "dist1_cnt": metrics_cnt["distinct_1"],
-
                 "dist2_brie": metrics_brie["distinct_2"],
                 "dist2_brie_sum": metrics_brie_sum["distinct_2"],
                 "dist2_random": metrics_random["distinct_2"],
@@ -443,11 +438,6 @@ def test_tripadvisor_authorship_task(datamodule, model_preds, args):
                 "rouge_cnt": subset["rouge_cnt"].mean() if len(subset) > 0 else np.nan,
 
                 # DIVERSITY
-                "dist1_brie": subset["dist1_brie"].mean() if len(subset) > 0 else np.nan,
-                "dist1_brie_sum": subset["dist1_brie_sum"].mean() if len(subset) > 0 else np.nan,
-                "dist1_random": subset["dist1_random"].mean() if len(subset) > 0 else np.nan,
-                "dist1_cnt": subset["dist1_cnt"].mean() if len(subset) > 0 else np.nan,
-
                 "dist2_brie": subset["dist2_brie"].mean() if len(subset) > 0 else np.nan,
                 "dist2_brie_sum": subset["dist2_brie_sum"].mean() if len(subset) > 0 else np.nan,
                 "dist2_random": subset["dist2_random"].mean() if len(subset) > 0 else np.nan,
