@@ -29,7 +29,7 @@ def percentile_figure(data: dict):
             color=PLOT_COLORS.get(metrics["model_name"], None),
         )
 
-    ax1.set_xlabel("Users with ≥x train images")
+    ax1.set_xlabel("Users with ≥x train reviews")
     ax1.set_ylabel("Median percentile of author's image")
     ax1.set_xlim(0, 100)
     ax1.set_ylim(0, 1)
@@ -124,7 +124,7 @@ def bleu_figure(data: dict):
 
         xmax = max(xmax, x_valid.max())
 
-    ax1.set_xlabel("Users with ≥x train images", fontsize=14)
+    ax1.set_xlabel("Users with ≥x train reviews", fontsize=14)
     ax1.set_ylabel("Mean BLEU", fontsize=14)
     ax1.tick_params(axis='both', which='major', labelsize=12)
 
@@ -202,7 +202,7 @@ def rouge_figure(data: dict):
             alpha=0.8
         )
 
-    ax1.set_xlabel("Users with ≥x train images", fontsize=14)
+    ax1.set_xlabel("Users with ≥x train reviews", fontsize=14)
     ax1.set_ylabel("Mean ROUGE", fontsize=14)
     ax1.set_ylim(0, 1)
     ax1.tick_params(axis='both', which='major', labelsize=12)
@@ -274,7 +274,7 @@ def generic_metric_figure(data: dict, metric_key: str, ylabel: str, filename: st
             alpha=0.8
         )
 
-    ax1.set_xlabel("Users with ≥x train images", fontsize=14)
+    ax1.set_xlabel("Users with ≥x train reviews", fontsize=14)
     ax1.set_ylabel(ylabel, fontsize=14)
 
     ymax = max([
